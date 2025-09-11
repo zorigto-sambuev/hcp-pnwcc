@@ -12,7 +12,7 @@ app.use(express.json({ limit: "1mb" }));
 
 // basic health check
 app.get("/", (_req, res) => {
-  res.status(200).send("OK");
+  res.status(200).send("OK!");
 });
 
 // webhook endpoint
