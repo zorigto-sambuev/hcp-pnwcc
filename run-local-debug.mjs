@@ -1,11 +1,7 @@
-
-
 // run-local-debug.mjs
 import { chromium } from 'playwright';
 import fs from 'fs/promises';
 import path from 'path';
-import { selectArrivalWindowByStart } from 'https://github.com/craigneil/hcp-pnwcc/blob/main/arrival-window-patch.mjs';
-
 
 /** ======= Config ======= */
 const START_URL =
@@ -27,86 +23,6 @@ function normInt(v) {
   if (v == null) return 0;
   const n = parseInt(String(v).trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-async function run() {
-  const bcatUrl = 'wss://api.browsercat.com/connect';
-  const browser = await pw.chromium.connect(bcatUrl, {
-    headers: {'Api-Key': '31H7FOtoqgQqRDXY16E8FOnDvMERngkVUxveZITLxJ0wyroLDInJxyVF7G4F3hDy'},
-  });
-
-// --- helpers for exact field targeting ---
-async function fillByTestId(page, testId, value) {
-  try {
-    const input = page.getByTestId(testId).first();
-    await input.waitFor({ timeout: 8000 });
-    await input.scrollIntoViewIfNeeded().catch(() => {});
-    await input.fill(String(value), { timeout: 3000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Select a value in an MUI Autocomplete input identified by data-testid.
- * Works with either 2-letter state code ("CA") or full name ("California").
- */
-async function selectAutocompleteByTestId(page, testId, value) {
-  if (!value) return false;
-  const fullNameByCode = {
-    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado",
-    CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho",
-    IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana",
-    ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota",
-    MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
-    NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
-    NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon",
-    PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota",
-    TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia",
-    WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
-    DC: "District of Columbia"
-  };
-
-  const code = String(value).trim().toUpperCase();
-  const full = fullNameByCode[code] || value;
-
-  try {
-    const input = page.getByTestId(testId).first();
-    await input.waitFor({ timeout: 8000 });
-    await input.click({ timeout: 3000 });
-    // Clear any previous content (MUI Autocomplete sometimes needs select+delete)
-    await input.fill('');
-    await input.type(String(code), { delay: 50 });
-
-    // Wait for listbox and try to pick best match
-    // First try exact code (e.g., "CA"), then full name.
-    const optionByCode = page.getByRole('option', { name: new RegExp(`^\\s*${code}\\b`, 'i') }).first();
-    const optionByFull = page.getByRole('option', { name: new RegExp(`^\\s*${full}\\b`, 'i') }).first();
-
-    if (await optionByCode.count()) {
-      await optionByCode.click({ timeout: 2500 });
-      return true;
-    }
-    if (await optionByFull.count()) {
-      await optionByFull.click({ timeout: 2500 });
-      return true;
-    }
-
-    // Fallback: press Enter to accept top suggestion
-    await page.keyboard.press('Enter');
-    return true;
-  } catch {
-    // Last-ditch: just type the value and Enter.
-    try {
-      const input = page.getByTestId(testId).first();
-      await input.type(String(full), { delay: 50 });
-      await page.keyboard.press('Enter');
-      return true;
-    } catch {
-      return false;
-    }
-  }
 }
 
 async function waitIdle(page, ms = 250) {
@@ -240,95 +156,44 @@ async function closeCartDrawerIfOpen(page) {
   if (closed) await waitIdle(page, 200);
 }
 
+
 /** ======= Contact details & scheduling ======= */
 async function fillContactDetails(page, p) {
+  // Destructure all the needed values from the payload parameter 'p'
   const { first_name, last_name, phone, email, street_address, city, state, zipcode } = p;
 
-  // Wait for the contact form to be present — prefer the known testIds.
-  const contactReady =
-    await page.getByTestId('online-booking-contact-email').first().waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
-  if (!contactReady) {
-    // Soft fallback: wait for an Email textbox if testId changed.
-    await page.getByRole('textbox', { name: /email/i }).first().waitFor({ timeout: 8000 }).catch(() => {});
-  }
+  log('[contact] Filling contact form...');
 
-  // Email, City via testId (then fallbacks)
-  if (email) {
-    const ok =
-      (await fillByTestId(page, 'online-booking-contact-email', email)) ||
-      (await fillByLabel(page, /email/i, email)) ||
-      (await fillByPlaceholder(page, /email/i, email)) ||
-      (await page.locator('input[name="email"], input[autocomplete="email"]').first().fill(String(email)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set email');
-  }
+  // Use getByTestId for reliable targeting of each field
+  if (first_name) await page.getByTestId('online-booking-contact-firstname').fill(first_name);
+  if (last_name) await page.getByTestId('online-booking-contact-lastname').fill(last_name);
+  if (phone) await page.getByTestId('online-booking-contact-phone').fill(phone);
+  if (email) await page.getByTestId('online-booking-contact-email').fill(email);
+  if (street_address) await page.getByTestId('online-booking-contact-street').fill(street_address);
+  if (city) await page.getByTestId('online-booking-contact-city').fill(city);
+  if (zipcode) await page.getByTestId('online-booking-contact-zip').fill(zipcode);
 
-  if (first_name) {
-    const ok =
-      (await fillByLabel(page, /first name/i, first_name)) ||
-      (await fillByPlaceholder(page, /first name/i, first_name)) ||
-      (await page.locator('input[name="firstName"], input[name="first_name"]').first().fill(String(first_name)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set first name');
-  }
-
-  if (last_name) {
-    const ok =
-      (await fillByLabel(page, /last name/i, last_name)) ||
-      (await fillByPlaceholder(page, /last name/i, last_name)) ||
-      (await page.locator('input[name="lastName"], input[name="last_name"]').first().fill(String(last_name)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set last name');
-  }
-
-  if (phone) {
-    const ok =
-      (await fillByLabel(page, /phone/i, phone)) ||
-      (await fillByPlaceholder(page, /phone/i, phone)) ||
-      (await page.locator('input[name="phone"], input[autocomplete="tel"], input[type="tel"]').first().fill(String(phone)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set phone');
-  }
-
-  if (street_address) {
-    const ok =
-      (await fillByLabel(page, /street|address/i, street_address)) ||
-      (await fillByPlaceholder(page, /street|address/i, street_address)) ||
-      (await page.locator('input[name="address"], input[name="street_address"], input[autocomplete="address-line1"]').first()
-        .fill(String(street_address)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set street address');
-  }
-
-  if (city) {
-    const ok =
-      (await fillByTestId(page, 'online-booking-contact-city', city)) ||
-      (await fillByLabel(page, /^city$/i, city)) ||
-      (await fillByPlaceholder(page, /^city$/i, city)) ||
-      (await page.locator('input[name="city"], input[autocomplete="address-level2"]').first().fill(String(city)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set city');
-  }
-
+  // Special handling for the State autocomplete dropdown
   if (state) {
-    const ok =
-      (await selectAutocompleteByTestId(page, 'online-booking-contact-state', state)) ||
-      (await fillByLabel(page, /^state$/i, state)) || // fallback if it ever becomes a normal input
-      (await page.locator('input[name="state"], input[autocomplete="address-level1"]').first().fill(String(state)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set state');
+    log(`[contact] Selecting state: ${state}`);
+    const stateInput = page.getByTestId('online-booking-contact-state');
+    
+    // Click the input to activate the dropdown list
+    await stateInput.click(); 
+    
+    // Type the state to filter the options; a small delay helps reliability
+    await stateInput.type(state, { delay: 50 }); 
+    
+    // Find the option in the listbox that appears and click it
+    const option = page.getByRole('option', { name: new RegExp(state, 'i') }).first();
+    await option.click();
   }
+  
+  log('[contact] Form filled.');
 
-  if (zipcode) {
-    const ok =
-      (await fillByLabel(page, /zip|postal/i, zipcode)) ||
-      (await fillByPlaceholder(page, /zip|postal/i, zipcode)) ||
-      (await page.locator('input[name="zip"], input[name="zipcode"], input[autocomplete="postal-code"]').first()
-        .fill(String(zipcode)).then(() => true).catch(() => false));
-    if (!ok) console.warn('[contact] Could not set zip');
-  }
-
-  // Consent checkbox — prefer testId if present, then generic fallbacks.
-  const consentClicked =
-    (await tryClick(page, ['[data-testid="online-booking-contact-consent"]'], 'consent-tid')) ||
-    (await tryClick(page, [{ role: 'checkbox', name: /consent|agree|terms|text/i }], 'consent-role')) ||
-    (await tryClick(page, ['input[type="checkbox"]'], 'consent-generic'));
-  if (!consentClicked) console.warn('[contact] Consent checkbox not found (may be optional).');
+  // Click the consent checkbox at the end
+  await tryClick(page, [{ role: 'checkbox' }, 'input[type="checkbox"]'], 'consent');
 }
-
 
 async function fillByLabel(page, labelRe, value) {
   try {
@@ -383,25 +248,58 @@ function parseMMDDYYYY(s) {
 }
 async function selectDate(page, dateStr) {
   const dt = parseMMDDYYYY(dateStr);
-  if (!dt) return warn('Bad appointment_date; skip date selection.');
-  const dayRe = new RegExp(`^\\s*${dt.d}\\s*$`);
-  const clicks = [
-    { role: 'button', name: dayRe },
-    { text: dayRe },
-    'button[aria-label*="Choose"]',
-  ];
-  if (!(await tryClick(page, clicks, 'calendar-day'))) {
+  if (!dt) {
+    warn('Bad appointment_date; skip date selection.');
+    return;
+  }
+
+  // Get the three-letter month abbreviation (e.g., 'Sep')
+  // We use `dt.m - 1` because JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.).
+  const monthAbbr = new Date(dt.y, dt.m - 1, dt.d).toLocaleString('en-US', { month: 'short' });
+
+  // Create a flexible regular expression that looks for the month abbreviation
+  // and the day number, ignoring everything after it.
+  // The 'i' flag ensures the match is case-insensitive.
+  const re = new RegExp(`${monthAbbr}\\s*${dt.d}`, 'i');
+
+  const ok = await tryClick(
+    page,
+    [
+      // Use the new, flexible regular expression to find the button by its text content.
+      { role: 'button', name: re },
+      { text: re },
+    ],
+    'calendar-day'
+  );
+
+  if (!ok) {
     warn('Could not pick date; you may need month navigation.');
   } else {
     await waitIdle(page, 250);
   }
 }
 async function selectTimeFrame(page, startTimeStr) {
-  const re = new RegExp(`^\\s*${escRe(startTimeStr)}\\s*-`, 'i');
-  const ok =
-    (await tryClick(page, [{ role: 'button', name: re }, { text: re }], 'timeframe')) ||
-    (await tryClick(page, [{ role: 'button', name: new RegExp(escRe(startTimeStr), 'i') }], 'timeframe2'));
-  if (!ok) warn(`Could not select time frame starting "${startTimeStr}"`);
+  // First, strip " AM" or " PM" from the input string to get just the time.
+  const timeOnlyStr = startTimeStr.replace(/\s*(?:AM|PM)$/i, '');
+
+  // Now, create a flexible regular expression that looks for the time followed by a hyphen.
+  // We use `\s*` to allow for any whitespace between the time and the hyphen.
+  const re = new RegExp(`^\\s*${escRe(timeOnlyStr)}\\s*-`, 'i');
+
+  const ok = await tryClick(
+    page,
+    [
+      // Prioritize finding a button with the specific role and name.
+      { role: 'button', name: re },
+      // Fallback to finding any element containing the text.
+      { text: re }
+    ],
+    'timeframe'
+  );
+
+  if (!ok) {
+    warn(`Could not select time frame starting "${startTimeStr}"`);
+  }
 }
 
 /** ======= New per-service finalize flow ======= */
@@ -457,12 +355,8 @@ async function finalizeThisService(page, payload, { isLast }) {
 
   await waitIdle(page, 600);
 
-if (payload.appointment_date) {
-  await selectDate(page, payload.appointment_date);
-}
-if (payload.time_frame_start) {
-  await selectArrivalWindowByStart(page, payload.time_frame_start);
-}
+  if (payload.appointment_date) await selectDate(page, payload.appointment_date);
+  if (payload.time_frame_start) await selectTimeFrame(page, payload.time_frame_start);
 
   await tryClick(page, [{ role: 'button', name: /^next$/i }, { text: /^next$/i }], 'schedule-next');
   await waitIdle(page, 300);
@@ -572,7 +466,7 @@ async function main() {
   const payload = JSON.parse(raw);
   log('[loader] Using payload from', PAYLOAD_PATH);
 
-  const browser = await chromium.connect({ headless: HEADLESS, slowMo: SLOWMO });
+  const browser = await chromium.launch({ headless: HEADLESS, slowMo: SLOWMO });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -628,4 +522,3 @@ async function main() {
 }
 
 main();
-}
