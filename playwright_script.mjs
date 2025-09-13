@@ -27,8 +27,9 @@ const PAYLOAD_JSON_STRING = process.env.PAYLOAD_JSON;
 
 const SLOWMO = Number(process.env.SLOWMO || '0');
 const KEEP_OPEN = process.env.KEEP_OPEN === '1';
-const HEADLESS =
-  process.env.HEADLESS === '1' ? true : process.env.HEADLESS === '0' ? false : false;
+// const HEADLESS =
+//   process.env.HEADLESS === '1' ? true : process.env.HEADLESS === '0' ? false : false;
+const HEADLESS = false
 
 /** ======= Utils ======= */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -73,9 +74,9 @@ async function tryClick(page, variants, tag = 'click') {
 async function verifySuccess(page) {
   try {
     // Wait for the text "Thank you" to be visible on the page.
-    await page.getByText('Thank you').waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByText('Thank you').waitFor({ state: 'visible', timeout: 30000 });
     // Also wait for the more specific confirmation message.
-    await page.getByText('Your booking was successful.').waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByText('Your booking was successful.').waitFor({ state: 'visible', timeout: 30000 });
     log('Successfully reached the "Thank you" confirmation page.');
     return true;
   } catch (e) {
@@ -465,11 +466,11 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     log('Setting up for button click...');
     
     // Wait for dialog to be fully loaded
-    await page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 15000 });
+    await page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 25000 });
     log('Dialog is visible');
     
     // Wait for booking confirmation text
-    await page.waitForSelector('h5:has-text("Booking confirmation")', { state: 'visible', timeout: 10000 });
+    await page.waitForSelector('h5:has-text("Booking confirmation")', { state: 'visible', timeout: 30000 });
     log('Booking confirmation page loaded');
     
     // Wait a bit for any animations to complete
@@ -598,13 +599,13 @@ async function waitForNetworkRequests(page) {
                url.includes('appointment') ||
                url.includes('api') ||
                url.includes('housecall');
-      }, { timeout: 10000 }),
+      }, { timeout: 30000 }),
       
       // Or wait for network to be idle
-      page.waitForLoadState('networkidle', { timeout: 10000 }),
+      page.waitForLoadState('networkidle', { timeout: 30000 }),
       
       // Or timeout after 10 seconds
-      page.waitForTimeout(10000)
+      page.waitForTimeout(30000)
     ]);
     
     log('Network requests completed');
