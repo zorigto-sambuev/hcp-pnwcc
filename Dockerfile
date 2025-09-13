@@ -13,11 +13,9 @@ RUN npm install --omit=dev && npm cache clean --force
 # Create directories for screenshots and temporary files
 RUN mkdir -p /app/screenshots /app/temp
 
-# Copy all application files
+# Copy production application files
 COPY server.mjs ./server.mjs
 COPY playwright_script.mjs ./playwright_script.mjs
-COPY run-local-debug.mjs ./run-local-debug.mjs
-COPY instrument.mjs ./instrument.mjs
 
 # Create a non-root user for security (Render best practice)
 RUN groupadd -r appuser && useradd -r -g appuser -u 1001 appuser
