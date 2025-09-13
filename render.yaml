@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: hcp-booking-automation
+    runtime: docker
+    plan: starter
+    region: oregon
+    buildCommand: docker build -t hcp-booking .
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: HEADLESS
+        value: "1"
+      - key: NODE_ENV
+        value: production
+    # You'll need to set these in Render dashboard:
+    # - WEBHOOK_SECRET
+    # - RUNNER_URL  
+    # - RUNNER_AUTH
+    # - BROWSERCAT_API_KEY (if using Browsercat)
+    # - SENTRY_DSN (for error tracking)
+    
+    # Disk storage for screenshots and temporary files
+    disk:
+      name: screenshots
+      mountPath: /app/screenshots
+      sizeGB: 1
+      
+    # Health check endpoint
+    healthCheckPath: /
+    
+    # Auto-deploy from main branch
+    autoDeploy: true
+    
+    # Scale configuration
+    numInstances: 1
+    
+    # Build settings
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./

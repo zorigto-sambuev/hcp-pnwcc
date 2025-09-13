@@ -1,0 +1,62 @@
+# Git and version control
+.git
+.gitignore
+*.md
+
+# Documentation files (not needed in container)
+README.md
+RENDER_DEPLOYMENT.md
+ENVIRONMENT_VARIABLES.md
+
+# Environment files (secrets should be passed via env vars)
+.env
+.env.local
+.env.production
+.env.example
+
+# Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development files
+run-local-debug.mjs
+payload.json
+
+# Temporary files and logs
+*.log
+temp/
+tmp/
+.tmp/
+
+# Screenshots and debug files
+*.png
+*.jpg
+*.jpeg
+error-*.html
+failed-page-content-*.html
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Deployment specific
+fly.toml
+render.yaml
