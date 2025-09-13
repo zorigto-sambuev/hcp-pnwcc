@@ -4,8 +4,6 @@ services:
     runtime: docker
     plan: starter
     region: oregon
-    buildCommand: docker build -t hcp-booking .
-    startCommand: npm start
     envVars:
       - key: PORT
         value: 8080
