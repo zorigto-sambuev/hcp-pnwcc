@@ -81,7 +81,7 @@ async function verifySuccess(page) {
     return true;
   } catch (e) {
 
-    warn('Did not reach the "Thank you" confirmation page. ()');
+    warn('Did not reach the "Thank you" confirmation page.------ ()');
     return false;
   }
 }
