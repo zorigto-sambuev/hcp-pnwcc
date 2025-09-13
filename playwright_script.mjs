@@ -639,9 +639,17 @@ async function finalizeThisService(page, payload, { isLast }) {
     (await tryClick(page, [{ role: 'button', name: /book service/i }, { text: /book service/i }], 'book-service')) ||
     (await tryClick(page, [{ role: 'button', name: /book now|book my appointment|proceed/i }], 'book-alt'));
   if (!booked) {
-    // Occasionally the UI uses "Continue"
-    const cont = await tryClick(page, [{ role: 'button', name: /^continue$/i }, { text: /^continue$/i }], 'book-continue');
+    // Try more variations including Continue
+    const cont = 
+      (await tryClick(page, [{ role: 'button', name: /^continue$/i }, { text: /^continue$/i }], 'book-continue')) ||
+      (await tryClick(page, [{ role: 'button', name: /next|proceed|checkout/i }], 'book-next')) ||
+      (await tryClick(page, [`button:has-text("Book")`, `button:has-text("Continue")`, `button:has-text("Next")`], 'book-generic'));
+    
     if (!cont) {
+      // Debug: show available buttons
+      const availableButtons = await page.locator('button, [role="button"]').allInnerTexts().catch(() => []);
+      warn('Could not find Book Service button. Available buttons:', availableButtons?.slice(0, 15));
+      
       log('Could not reach contact details after adding a service.');
       throw new Error('Could not reach contact details after adding a service.');
     }
@@ -774,22 +782,46 @@ async function handlePetStain(page, payload, meta) {
 async function handleUpholstery(page, label, qty, payload, meta) {
   await clickService(page, 'Upholstery');
 
-  const picked =
-    (await tryClick(
-      page,
-      [
-        { role: 'button', name: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
-        { text: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
-        `button:has-text("${label}")`,
-      ],
-      'upholstery-item'
-    )) || (await tryClick(page, [{ text: new RegExp(escRe(label), 'i') }], 'upholstery-text'));
-  if (!picked) warn(`Could not click upholstery item "${label}".`);
+  // Create flexible patterns for matching upholstery items
+  const flexibleLabel = new RegExp(escRe(label), 'i');
+  const exactLabel = new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i');
+  
+  // Use more robust set of selectors similar to carpet cleaning
+  const picked = await tryClick(
+    page,
+    [
+      // Try exact matches first
+      { role: 'button', name: exactLabel },
+      { text: exactLabel },
+      
+      // Try flexible matches
+      { role: 'button', name: flexibleLabel },
+      { text: flexibleLabel },
+      
+      // Try Playwright selectors
+      `button:has-text("${label}")`,
+      `[role="button"]:has-text("${label}")`,
+      
+      // Try common variations
+      `button:text-matches("${escRe(label)}", "i")`,
+      `div:has-text("${label}") button`,
+      
+      // Try broader selectors
+      `button[class*="card"], button[class*="item"], button[class*="option"]`,
+    ],
+    'upholstery-item'
+  );
+  
+  if (!picked) {
+    // Debug: try to find what upholstery options are available
+    const availableOptions = await page.locator('button, [role="button"]').allInnerTexts().catch(() => []);
+    warn(`Could not click upholstery item "${label}". Available options:`, availableOptions?.slice(0, 10));
+  }
 
   if (qty && qty > 1) await setQty(page, qty);
 
   await waitIdle(page, 250);
-  await randomDelay(1000, 4500); // Add delay here
+  await randomDelay(1000, 4500);
   await finalizeThisService(page, payload, meta);
 }
 
