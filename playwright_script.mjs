@@ -80,12 +80,8 @@ async function verifySuccess(page) {
     log('Successfully reached the "Thank you" confirmation page.');
     return true;
   } catch (e) {
-    await page.screenshot({ 
-  path: `booking-result-${Date.now()}.png`, 
-  fullPage: true 
-});
 
-    warn('Did not reach the "Thank you" confirmation page.');
+    warn('Did not reach the "Thank you" confirmation page. ()');
     return false;
   }
 }
