@@ -13,11 +13,9 @@ RUN npm install --omit=dev && npm cache clean --force
 # Create directories for screenshots and temporary files
 RUN mkdir -p /app/screenshots /app/temp
 
-# Copy all application files
+# Copy production application files
 COPY server.mjs ./server.mjs
 COPY playwright_script.mjs ./playwright_script.mjs
-COPY run-local-debug.mjs ./run-local-debug.mjs
-COPY instrument.mjs ./instrument.mjs
 
 # Create a non-root user for security (Render best practice)
 RUN groupadd -r appuser && useradd -r -g appuser -u 1001 appuser
@@ -36,9 +34,9 @@ ENV NODE_ENV=production
 # Expose the port to allow external access.
 EXPOSE 8080
 
-# Health check for Render
+# Health check for Render (using node instead of curl)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/ || exit 1
+  CMD node -e "require('http').get('http://localhost:8080/', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # The command to start the application when the container runs.
 CMD ["npm", "start"]
