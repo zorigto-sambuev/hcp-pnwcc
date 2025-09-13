@@ -29,7 +29,7 @@ const SLOWMO = Number(process.env.SLOWMO || '0');
 const KEEP_OPEN = process.env.KEEP_OPEN === '1';
 // const HEADLESS =
 //   process.env.HEADLESS === '1' ? true : process.env.HEADLESS === '0' ? false : false;
-const HEADLESS = false
+const HEADLESS = true
 
 /** ======= Utils ======= */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -80,6 +80,11 @@ async function verifySuccess(page) {
     log('Successfully reached the "Thank you" confirmation page.');
     return true;
   } catch (e) {
+    await page.screenshot({ 
+  path: `booking-result-${Date.now()}.png`, 
+  fullPage: true 
+});
+
     warn('Did not reach the "Thank you" confirmation page.');
     return false;
   }
@@ -836,8 +841,78 @@ async function main() {
   const payload = JSON.parse(PAYLOAD_JSON_STRING || '{}');
   log('[loader] Using payload from environment variable');
 
-  const browser = await chromium.launch({ headless: HEADLESS, slowMo: SLOWMO });
-  const context = await browser.newContext();
+  const browser = await chromium.launch({
+  headless: HEADLESS,
+  slowMo: SLOWMO,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+    '--disable-gpu',
+    
+    // Anti-bot detection
+    '--disable-blink-features=AutomationControlled',
+    '--disable-features=VizDisplayCompositor',
+    '--disable-web-security',
+    '--disable-features=TranslateUI',
+    '--disable-ipc-flooding-protection',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-background-timer-throttling',
+    '--disable-hang-monitor',
+    '--disable-client-side-phishing-detection',
+    '--disable-popup-blocking',
+    '--disable-default-apps',
+    '--disable-extensions',
+    '--disable-component-extensions-with-background-pages',
+    '--disable-sync',
+    
+    // Make it look more human
+    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7103.48 Safari/537.36',
+    '--window-size=1920,1080'
+  ]
+});
+
+const context = await browser.newContext({
+  viewport: { width: 1920, height: 1080 },
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7103.48 Safari/537.36',
+  locale: 'en-US',
+  timezoneId: 'America/Los_Angeles',
+  permissions: ['geolocation'],
+  geolocation: { longitude: -118.2437, latitude: 34.0522 }, 
+  colorScheme: 'light'
+});
+
+// Remove webdriver detection
+await context.addInitScript(() => {
+  // Remove webdriver property
+  Object.defineProperty(navigator, 'webdriver', {
+    get: () => undefined,
+  });
+  
+  // Remove automation flags
+  delete window.chrome.runtime.onConnect;
+  
+  // Mock human-like properties
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [1, 2, 3, 4, 5],
+  });
+  
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['en-US', 'en'],
+  });
+  
+  // Add realistic screen properties
+  Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
+  Object.defineProperty(screen, 'availHeight', { get: () => 1080 });
+});
+
+
+  // const context = await browser.newContext();
   const page = await context.newPage();
 
   try {
