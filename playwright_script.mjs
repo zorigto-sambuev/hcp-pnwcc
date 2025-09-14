@@ -832,6 +832,12 @@ function buildQueue(p) {
   return q;
 }
 
+const proxyConfig = {
+  server: 'http://your-proxy-server.com:3128',  // Your proxy URL
+  username: 'your-proxy-username',              // Proxy authentication
+  password: 'your-proxy-password'               // Proxy password
+};
+
 /** ======= Main ======= */
 async function main() {
   const payload = JSON.parse(PAYLOAD_JSON_STRING || '{}');
@@ -839,6 +845,7 @@ async function main() {
 
   const browser = await chromium.launch({
   headless: HEADLESS,
+  Proxy : proxyConfig,
   slowMo: SLOWMO,
   args: [
     '--no-sandbox',
