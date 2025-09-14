@@ -833,9 +833,9 @@ function buildQueue(p) {
 }
 
 const proxyConfig = {
-  server: 'http://gw.dataimpulse.com:823',  // Your proxy URL
-  username: 'd7ddd6e520257dcceaaa__cr.us',              // Proxy authentication
-  password: '5c5ee764922cde9f'               // Proxy password
+  server: 'http://gw.dataimpulse.com:823',  
+  username: 'd7ddd6e520257dcceaaa__cr.us',              
+  password: '5c5ee764922cde9f'               
 };
 
 /** ======= Main ======= */
