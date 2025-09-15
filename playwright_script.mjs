@@ -618,36 +618,93 @@ async function waitForNetworkRequests(page) {
 
 /** ======= New per-service finalize flow ======= */
 async function finalizeThisService(page, payload, { isLast }) {
-  log('Starting finalizeThisService function...');
+  log(`[finalize] Starting finalizeThisService function... (isLast: ${isLast})`);
+  
   // Some items auto-open a cart drawer—close it to avoid overlay issues.
   await closeCartDrawerIfOpen(page);
+  await waitIdle(page, 1000);
 
   // 1) Add to booking (if present)
-  log('Attempting to add to booking...');
-  const added =
-    (await tryClick(page, [{ role: 'button', name: /^add to booking$/i }], 'add-to-booking1')) ||
-    (await tryClick(page, [{ role: 'button', name: /add\s*to\s*booking/i }, { text: /add to booking/i }], 'add-to-booking2'));
-  if (!added) warn('No "Add to booking" visible—may be auto-added.');
-  log('Add to booking step complete.');
+  log('[finalize] Attempting to add to booking...');
+  
+  // Enhanced selectors for "Add to booking" button
+  const addToBookingSelectors = [
+    { role: 'button', name: /^add to booking$/i },
+    { role: 'button', name: /add\s*to\s*booking/i },
+    { text: /add to booking/i },
+    `button:has-text("Add to booking")`,
+    `button:has-text("Add to Booking")`,
+    `.MuiButton-root:has-text("Add to booking")`,
+    `[role="button"]:has-text("Add to booking")`,
+  ];
+  
+  const added = await tryClick(page, addToBookingSelectors, 'add-to-booking');
+  
+  if (!added) {
+    // Debug what buttons are available
+    try {
+      const availableButtons = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        return buttons.map(btn => btn.textContent?.trim() || '').filter(text => text.length > 0).slice(0, 10);
+      });
+      log('[finalize] Available buttons:', availableButtons);
+    } catch {}
+    
+    warn('[finalize] No "Add to booking" visible—may be auto-added or service not selected properly.');
+  } else {
+    log('[finalize] Successfully added to booking.');
+  }
 
-  await waitIdle(page, 850);
+  await waitIdle(page, 1200);
   await closeCartDrawerIfOpen(page);
 
   // 2) Click "Book Service" to reach contacts
-  log('Attempting to click "Book Service" or similar...');
-  const booked =
-    (await tryClick(page, [{ role: 'button', name: /book service/i }, { text: /book service/i }], 'book-service')) ||
-    (await tryClick(page, [{ role: 'button', name: /book now|book my appointment|proceed/i }], 'book-alt'));
+  log('[finalize] Attempting to click "Book Service" or similar...');
+  
+  // Enhanced selectors for "Book Service" button
+  const bookServiceSelectors = [
+    { role: 'button', name: /book service/i },
+    { text: /book service/i },
+    { role: 'button', name: /book now/i },
+    { role: 'button', name: /book my appointment/i },
+    { role: 'button', name: /proceed/i },
+    { role: 'button', name: /continue$/i },
+    { text: /continue$/i },
+    `button:has-text("Book Service")`,
+    `button:has-text("Book Now")`,
+    `button:has-text("Continue")`,
+    `.MuiButton-root:has-text("Book")`,
+    `.MuiButton-containedPrimary`,
+  ];
+  
+  const booked = await tryClick(page, bookServiceSelectors, 'book-service');
+  
   if (!booked) {
-    // Occasionally the UI uses "Continue"
-    const cont = await tryClick(page, [{ role: 'button', name: /^continue$/i }, { text: /^continue$/i }], 'book-continue');
-    if (!cont) {
-      log('Could not reach contact details after adding a service.');
-      throw new Error('Could not reach contact details after adding a service.');
+    // Enhanced debugging
+    try {
+      log('[finalize] Taking debug screenshot for book service failure...');
+      await page.screenshot({ path: `book-service-failed-${Date.now()}.png`, fullPage: true });
+      
+      const availableButtons = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        return buttons.map(btn => ({
+          text: btn.textContent?.trim() || '',
+          className: btn.className || '',
+          disabled: btn.disabled || false
+        })).filter(item => item.text.length > 0);
+      });
+      log('[finalize] All available buttons:', JSON.stringify(availableButtons, null, 2));
+    } catch (debugError) {
+      warn('[finalize] Debug capture failed:', debugError.message);
     }
+    
+    errLog('[finalize] CRITICAL: Could not reach contact details after adding a service.');
+    errLog('[finalize] This usually means the service was not properly selected or added to cart.');
+    throw new Error('Could not reach contact details after adding a service. Check if service was properly selected.');
   }
-  log('Book Service step complete.');
-  await randomDelay(1000, 4500); // Add delay here
+  
+  log('[finalize] Successfully clicked Book Service.');
+  await randomDelay(1000, 3000);
 
   if (!isLast) {
     log('Not last service, attempting to go back...');
@@ -772,24 +829,84 @@ async function handlePetStain(page, payload, meta) {
 }
 
 async function handleUpholstery(page, label, qty, payload, meta) {
+  log(`[upholstery] Starting upholstery handling for: ${label}, qty: ${qty}`);
+  
   await clickService(page, 'Upholstery');
+  
+  // Wait longer for upholstery options to load
+  await waitIdle(page, 1500);
+  await randomDelay(1000, 2000);
+  
+  // Enhanced debugging - capture available options
+  try {
+    log('[upholstery] Capturing available upholstery options for debugging...');
+    const availableOptions = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button, [role="button"], .MuiCard-root, .MuiCardActionArea-root'));
+      return buttons.map(btn => ({
+        text: btn.textContent?.trim() || '',
+        className: btn.className || '',
+        tagName: btn.tagName || ''
+      })).filter(item => item.text && item.text.length > 0).slice(0, 20);
+    });
+    log('[upholstery] Available options found:', JSON.stringify(availableOptions, null, 2));
+  } catch (debugError) {
+    warn('[upholstery] Could not capture debug info:', debugError.message);
+  }
 
-  const picked =
-    (await tryClick(
-      page,
-      [
-        { role: 'button', name: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
-        { text: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
-        `button:has-text("${label}")`,
-      ],
-      'upholstery-item'
-    )) || (await tryClick(page, [{ text: new RegExp(escRe(label), 'i') }], 'upholstery-text'));
-  if (!picked) warn(`Could not click upholstery item "${label}".`);
+  // Enhanced selectors for upholstery items
+  const selectors = [
+    // Exact text matches
+    { role: 'button', name: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
+    { text: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
+    
+    // Button with text
+    `button:has-text("${label}")`,
+    
+    // Material-UI card components
+    `.MuiCard-root:has-text("${label}")`,
+    `.MuiCardActionArea-root:has-text("${label}")`,
+    `.MuiButtonBase-root:has-text("${label}")`,
+    
+    // Flexible text matching
+    { text: new RegExp(escRe(label), 'i') },
+    
+    // CSS selector variations
+    `[role="button"]:has-text("${label}")`,
+    `div:has-text("${label}")[role="button"]`,
+    
+    // Last resort - any clickable element with the text
+    `*:has-text("${label}")`,
+  ];
 
-  if (qty && qty > 1) await setQty(page, qty);
+  log(`[upholstery] Attempting to click upholstery item: "${label}"`);
+  const picked = await tryClick(page, selectors, 'upholstery-item');
+  
+  if (!picked) {
+    errLog(`[upholstery] CRITICAL: Could not click upholstery item "${label}". This will cause cascade failures.`);
+    
+    // Take debug screenshot
+    try {
+      await page.screenshot({ path: `upholstery-selection-failed-${Date.now()}.png`, fullPage: true });
+      log('[upholstery] Debug screenshot saved');
+    } catch {}
+    
+    // Stop execution to prevent cascade failures
+    throw new Error(`Failed to select upholstery item "${label}". Cannot continue with empty cart.`);
+  }
+  
+  log(`[upholstery] Successfully selected: ${label}`);
 
-  await waitIdle(page, 250);
-  await randomDelay(1000, 4500); // Add delay here
+  // Handle quantity if needed
+  if (qty && qty > 1) {
+    log(`[upholstery] Setting quantity to: ${qty}`);
+    const qtySet = await setQty(page, qty);
+    if (!qtySet) {
+      warn(`[upholstery] Could not set quantity to ${qty}, continuing with default`);
+    }
+  }
+
+  await waitIdle(page, 500);
+  await randomDelay(1000, 3000);
   await finalizeThisService(page, payload, meta);
 }
 
@@ -809,11 +926,20 @@ async function handleCarpetStretching(page, payload, meta) {
 /** ======= Queue builder ======= */
 function buildQueue(p) {
   const q = [];
+  
+  log('[queue] Building queue from payload:', JSON.stringify(p, null, 2));
 
-  if (p.carpet_cleaning) q.push({ type: 'carpet_cleaning', bedrooms: Number(p.bedrooms || 4) });
-  if (p.pet_stain) q.push({ type: 'pet_stain' });
+  if (p.carpet_cleaning && (p.carpet_cleaning === true || p.carpet_cleaning === 'True')) {
+    q.push({ type: 'carpet_cleaning', bedrooms: Number(p.bedrooms || 4) });
+    log('[queue] Added carpet cleaning for', Number(p.bedrooms || 4), 'bedrooms');
+  }
+  
+  if (p.pet_stain && (p.pet_stain === true || p.pet_stain === 'True')) {
+    q.push({ type: 'pet_stain' });
+    log('[queue] Added pet stain service');
+  }
 
-  if (p.upholstery) {
+  if (p.upholstery && (p.upholstery === true || p.upholstery === 'True')) {
     const map = {
       love_seat: 'Love Seat',
       couch: 'Couch',
@@ -822,13 +948,31 @@ function buildQueue(p) {
       medium_sectional: 'Medium Sectional',
       large_sectional: 'Large Sectional',
     };
+    
+    let upholsteryItemsAdded = 0;
     for (const [key, label] of Object.entries(map)) {
       const qty = normInt(p[key]);
-      if (qty > 0) q.push({ type: 'upholstery', itemKey: key, label, qty });
+      if (qty > 0) {
+        q.push({ type: 'upholstery', itemKey: key, label, qty });
+        log(`[queue] Added upholstery: ${label} (qty: ${qty})`);
+        upholsteryItemsAdded++;
+      }
+    }
+    
+    if (upholsteryItemsAdded === 0) {
+      warn('[queue] WARNING: Upholstery service is enabled but no upholstery items have quantity > 0');
+      log('[queue] Current upholstery quantities:', Object.fromEntries(
+        Object.keys(map).map(key => [key, p[key] || 0])
+      ));
     }
   }
 
-  if (p.carpet_stretching) q.push({ type: 'carpet_stretching' });
+  if (p.carpet_stretching && (p.carpet_stretching === true || p.carpet_stretching === 'True')) {
+    q.push({ type: 'carpet_stretching' });
+    log('[queue] Added carpet stretching service');
+  }
+  
+  log(`[queue] Final queue contains ${q.length} items:`, q);
   return q;
 }
 
