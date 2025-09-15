@@ -359,17 +359,41 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
         'button:has-text("Submit")',
         'button:has-text("Continue")',
         'button:has-text("Finish")',
-        'button:has-text("Complete")'
+        'button:has-text("Complete")',
+        'button:has-text("Next")',
+        'button:has-text("Proceed")',
+        'button:has-text("Pay")',
+        'button:has-text("Reserve")'
       ];
       
       for (const selector of buttonSelectors) {
         try {
-          await page.waitForSelector(selector, { state: 'visible', timeout: 2000 });
+          await page.waitForSelector(selector, { state: 'visible', timeout: 1000 });
           await page.click(selector);
+          log('Successfully clicked button with selector:', selector);
           return;
         } catch {}
       }
-      throw new Error('No booking buttons found with expected text');
+      
+      // If no expected buttons found, try to click any visible button as last resort
+      log('No expected buttons found, trying any visible button...');
+      const anyButton = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const visibleButtons = buttons.filter(btn => 
+          btn.offsetParent !== null && // is visible
+          !btn.disabled && // not disabled
+          btn.textContent?.trim().length > 0 // has text content
+        );
+        return visibleButtons.length > 0 ? visibleButtons[0] : null;
+      });
+      
+      if (anyButton) {
+        await page.evaluate(btn => btn.click(), anyButton);
+        log('Clicked first available visible button as fallback');
+        return;
+      }
+      
+      throw new Error('No booking buttons found with expected text and no fallback buttons available');
     },
     
     // Strategy 2: Primary Material-UI classes (flexible)
@@ -438,24 +462,47 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       });
     },
     
-    // Strategy 8: Dynamic button discovery and click
+    // Strategy 8: Dynamic button discovery with exhaustive search
     async () => {
-      log('Strategy 8: Dynamic button discovery');
-      const bookingButton = await page.evaluate(() => {
+      log('Strategy 8: Dynamic button discovery with exhaustive search');
+      const result = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
-        const bookingButtons = buttons.filter(btn => {
+        const visibleButtons = buttons.filter(btn => 
+          btn.offsetParent !== null && // is visible
+          !btn.disabled // not disabled
+        );
+        
+        // Priority 1: Buttons with booking-related keywords
+        const bookingButtons = visibleButtons.filter(btn => {
           const text = btn.textContent?.toLowerCase() || '';
-          return text.includes('book') || text.includes('confirm') || text.includes('submit') || text.includes('continue');
+          return text.includes('book') || text.includes('confirm') || text.includes('submit') || 
+                 text.includes('continue') || text.includes('finish') || text.includes('complete') ||
+                 text.includes('proceed') || text.includes('pay') || text.includes('reserve');
         });
         
-        // Prioritize buttons with "book" in them
-        return bookingButtons.find(btn => btn.textContent.toLowerCase().includes('book')) || bookingButtons[0];
+        // Priority 2: Primary/contained buttons (likely action buttons)
+        const primaryButtons = visibleButtons.filter(btn => 
+          btn.className.includes('Primary') || btn.className.includes('contained')
+        );
+        
+        // Priority 3: Any visible button with text
+        const anyButtons = visibleButtons.filter(btn => 
+          btn.textContent?.trim().length > 0
+        );
+        
+        const buttonToClick = bookingButtons[0] || primaryButtons[0] || anyButtons[0];
+        
+        if (buttonToClick) {
+          buttonToClick.click();
+          return { success: true, buttonText: buttonToClick.textContent?.trim() };
+        }
+        return { success: false, availableButtons: visibleButtons.length };
       });
       
-      if (bookingButton) {
-        await page.evaluate(button => button.click(), bookingButton);
+      if (result.success) {
+        log('Successfully clicked button with text:', result.buttonText);
       } else {
-        throw new Error('No suitable booking button found');
+        throw new Error(`No clickable button found. Available buttons: ${result.availableButtons}`);
       }
     },
     
@@ -608,24 +655,46 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     // Wait a bit for any animations to complete
     await page.waitForTimeout(1500);
     
-    // Check if any booking button exists (flexible search)
-    const bookingButtons = await page.evaluate(() => {
+    // Check ALL available buttons for debugging (don't filter yet)
+    const allButtons = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
-      const bookingButtons = buttons.filter(btn => {
-        const text = btn.textContent?.toLowerCase() || '';
-        return text.includes('book') || text.includes('confirm') || text.includes('submit') || text.includes('continue');
-      });
-      return bookingButtons.map(btn => ({
+      return buttons.map(btn => ({
         text: btn.textContent?.trim() || '',
         className: btn.className || '',
-        disabled: btn.disabled || false
-      }));
+        disabled: btn.disabled || false,
+        visible: btn.offsetParent !== null
+      })).filter(btn => btn.text.length > 0); // Only filter out empty buttons
     });
     
-    log('Available booking buttons:', bookingButtons);
+    log('All available buttons on page:', allButtons);
     
-    if (bookingButtons.length === 0) {
-      throw new Error('No booking/confirmation buttons found on page');
+    // Now check for potential booking buttons with more flexible criteria
+    const potentialBookingButtons = allButtons.filter(btn => {
+      const text = btn.text.toLowerCase();
+      // More flexible keywords including common variations
+      return text.includes('book') || 
+             text.includes('confirm') || 
+             text.includes('submit') || 
+             text.includes('continue') ||
+             text.includes('next') ||
+             text.includes('finish') ||
+             text.includes('complete') ||
+             text.includes('proceed') ||
+             text.includes('pay') ||
+             text.includes('reserve') ||
+             btn.className.includes('Primary') || // Material-UI primary buttons
+             btn.className.includes('contained'); // Material-UI contained buttons
+    });
+    
+    log('Potential booking buttons found:', potentialBookingButtons);
+    
+    if (allButtons.length === 0) {
+      throw new Error('No buttons found on page at all');
+    }
+    
+    if (potentialBookingButtons.length === 0) {
+      log('No obvious booking buttons found, but proceeding to try all available buttons...');
+      // Don't fail here - let the strategies try all available buttons
     }
     
     log('Page setup complete, proceeding with booking...');
