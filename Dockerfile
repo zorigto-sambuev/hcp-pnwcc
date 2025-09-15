@@ -16,7 +16,6 @@ RUN mkdir -p /app/screenshots /app/temp
 # Copy all application files
 COPY server.mjs ./server.mjs
 COPY playwright_script.mjs ./playwright_script.mjs
-COPY run-local-debug.mjs ./run-local-debug.mjs
 COPY instrument.mjs ./instrument.mjs
 
 # Create a non-root user for security (Render best practice)
