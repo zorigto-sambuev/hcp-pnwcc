@@ -349,18 +349,47 @@ async function selectTimeFrame(page, startTimeStr) {
  */
 async function clickBookAppointmentButtonWithFallbacks(page) {
   const strategies = [
-    // Strategy 1: Text-based selector (most reliable)
+    // Strategy 1: Flexible text-based selector (most reliable)
     async () => {
-      log('Strategy 1: Clicking by text content');
-      await page.waitForSelector('button:has-text("Book my appointment")', { state: 'visible', timeout: 5000 });
-      await page.click('button:has-text("Book my appointment")');
+      log('Strategy 1: Clicking by flexible text content');
+      const buttonSelectors = [
+        'button:has-text("Book my appointment")',
+        'button:has-text("Book now")', 
+        'button:has-text("Confirm booking")',
+        'button:has-text("Submit")',
+        'button:has-text("Continue")',
+        'button:has-text("Finish")',
+        'button:has-text("Complete")'
+      ];
+      
+      for (const selector of buttonSelectors) {
+        try {
+          await page.waitForSelector(selector, { state: 'visible', timeout: 2000 });
+          await page.click(selector);
+          return;
+        } catch {}
+      }
+      throw new Error('No booking buttons found with expected text');
     },
     
-    // Strategy 2: Primary Material-UI class
+    // Strategy 2: Primary Material-UI classes (flexible)
     async () => {
-      log('Strategy 2: Clicking by primary MUI class');
-      await page.waitForSelector('.MuiButton-containedPrimary-338', { state: 'visible', timeout: 5000 });
-      await page.click('.MuiButton-containedPrimary-338');
+      log('Strategy 2: Clicking by primary MUI classes');
+      const classSelectors = [
+        '.MuiButton-containedPrimary-338',
+        '.MuiButton-containedPrimary',
+        '.MuiButton-contained[class*="Primary"]',
+        'button[class*="contained"][class*="Primary"]'
+      ];
+      
+      for (const selector of classSelectors) {
+        try {
+          await page.waitForSelector(selector, { state: 'visible', timeout: 2000 });
+          await page.click(selector);
+          return;
+        } catch {}
+      }
+      throw new Error('No primary buttons found');
     },
     
     // Strategy 3: Full class combination
@@ -381,13 +410,18 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       await page.click('button:has-text("Book my appointment")', { force: true });
     },
     
-    // Strategy 6: JavaScript evaluation click
+    // Strategy 6: JavaScript evaluation click (flexible text matching)
     async () => {
       log('Strategy 6: JavaScript evaluation click');
-    await page.evaluate(() => {
+      await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
-        const button = buttons.find(btn => btn.textContent.includes('Book my appointment')) ||
-                     document.querySelector('.MuiButton-containedPrimary-338');
+        const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
+        
+        const button = buttons.find(btn => {
+          const text = btn.textContent.toLowerCase();
+          return bookingKeywords.some(keyword => text.includes(keyword));
+        }) || document.querySelector('.MuiButton-containedPrimary-338, .MuiButton-containedPrimary, [class*="Primary"]');
+        
         if (button) button.click();
       });
     },
@@ -404,30 +438,82 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       });
     },
     
-    // Strategy 8: Focus and press Enter
+    // Strategy 8: Dynamic button discovery and click
     async () => {
-      log('Strategy 8: Focus and press Enter');
-      const button = await page.$('button:has-text("Book my appointment")');
-      if (button) {
-        await button.focus();
-        await page.keyboard.press('Enter');
+      log('Strategy 8: Dynamic button discovery');
+      const bookingButton = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const bookingButtons = buttons.filter(btn => {
+          const text = btn.textContent?.toLowerCase() || '';
+          return text.includes('book') || text.includes('confirm') || text.includes('submit') || text.includes('continue');
+        });
+        
+        // Prioritize buttons with "book" in them
+        return bookingButtons.find(btn => btn.textContent.toLowerCase().includes('book')) || bookingButtons[0];
+      });
+      
+      if (bookingButton) {
+        await page.evaluate(button => button.click(), bookingButton);
+      } else {
+        throw new Error('No suitable booking button found');
       }
     },
     
-    // Strategy 9: Focus and press Space
+    // Strategy 9: Focus and press Enter (flexible)
     async () => {
-      log('Strategy 9: Focus and press Space');
-      const button = await page.$('button:has-text("Book my appointment")');
-      if (button) {
-        await button.focus();
-        await page.keyboard.press('Space');
+      log('Strategy 9: Focus and press Enter');
+      const buttonSelectors = [
+        'button:has-text("Book my appointment")',
+        'button:has-text("Book now")',
+        'button:has-text("Confirm")',
+        'button[class*="Primary"]'
+      ];
+      
+      for (const selector of buttonSelectors) {
+        try {
+          const button = await page.$(selector);
+          if (button) {
+            await button.focus();
+            await page.keyboard.press('Enter');
+            return;
+          }
+        } catch {}
       }
     },
     
-    // Strategy 10: Coordinates-based click
+    // Strategy 10: Focus and press Space (flexible)
     async () => {
-      log('Strategy 10: Coordinates-based click');
-      const button = await page.$('button:has-text("Book my appointment")');
+      log('Strategy 10: Focus and press Space');
+      const buttonSelectors = [
+        'button:has-text("Book my appointment")',
+        'button:has-text("Book now")',
+        'button:has-text("Confirm")',
+        'button[class*="Primary"]'
+      ];
+      
+      for (const selector of buttonSelectors) {
+        try {
+          const button = await page.$(selector);
+          if (button) {
+            await button.focus();
+            await page.keyboard.press('Space');
+            return;
+          }
+        } catch {}
+      }
+    },
+    
+    // Strategy 11: Coordinates-based click (flexible)
+    async () => {
+      log('Strategy 11: Coordinates-based click');
+      const button = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        return buttons.find(btn => {
+          const text = btn.textContent?.toLowerCase() || '';
+          return text.includes('book') || text.includes('confirm') || text.includes('submit');
+        });
+      });
+      
       if (button) {
         const box = await button.boundingBox();
         if (box) {
@@ -436,29 +522,59 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       }
     },
     
-    // Strategy 11: Scroll into view and click
+    // Strategy 12: Scroll into view and click (flexible)
     async () => {
-      log('Strategy 11: Scroll into view and click');
+      log('Strategy 12: Scroll into view and click');
       await page.evaluate(() => {
-        const button = Array.from(document.querySelectorAll('button')).find(btn => 
-          btn.textContent.includes('Book my appointment'));
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const button = buttons.find(btn => {
+          const text = btn.textContent?.toLowerCase() || '';
+          return text.includes('book') || text.includes('confirm') || text.includes('submit');
+        });
         if (button) {
           button.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       });
       await page.waitForTimeout(1000);
-      await page.click('button:has-text("Book my appointment")');
+      
+      // Try multiple button selectors after scrolling
+      const buttonSelectors = [
+        'button:has-text("Book my appointment")',
+        'button:has-text("Book now")',
+        'button:has-text("Confirm")',
+        'button[class*="Primary"]'
+      ];
+      
+      for (const selector of buttonSelectors) {
+        try {
+          await page.click(selector, { timeout: 2000 });
+          return;
+        } catch {}
+      }
     },
     
-    // Strategy 12: Remove overlays and click
+    // Strategy 13: Remove overlays and click (flexible)
     async () => {
-      log('Strategy 12: Remove potential overlays and click');
+      log('Strategy 13: Remove potential overlays and click');
       await page.evaluate(() => {
         // Remove potential overlays
         const overlays = document.querySelectorAll('[class*="overlay"], [class*="backdrop"], [class*="modal-backdrop"]');
         overlays.forEach(overlay => overlay.remove());
       });
-      await page.click('button:has-text("Book my appointment")');
+      
+      const buttonSelectors = [
+        'button:has-text("Book my appointment")',
+        'button:has-text("Book now")', 
+        'button:has-text("Confirm")',
+        'button[class*="Primary"]'
+      ];
+      
+      for (const selector of buttonSelectors) {
+        try {
+          await page.click(selector, { timeout: 2000 });
+          return;
+        } catch {}
+      }
     }
   ];
 
@@ -466,27 +582,67 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
   try {
     log('Setting up for button click...');
     
-    // Wait for dialog to be fully loaded
-    await page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 25000 });
-    log('Dialog is visible');
+    // Wait for page to be ready (more flexible approach)
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
     
-    // Wait for booking confirmation text
-    await page.waitForSelector('h5:has-text("Booking confirmation")', { state: 'visible', timeout: 30000 });
-    log('Booking confirmation page loaded');
+    // Wait for one of several possible confirmation indicators
+    const confirmationFound = await Promise.race([
+      // Wait for dialog
+      page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 10000 }).then(() => 'dialog'),
+      
+      // Wait for various confirmation text variations
+      page.waitForSelector('h5:has-text("Booking confirmation")', { state: 'visible', timeout: 5000 }).then(() => 'booking-confirmation'),
+      page.waitForSelector('h1:has-text("confirmation"), h2:has-text("confirmation"), h3:has-text("confirmation"), h4:has-text("confirmation"), h5:has-text("confirmation"), h6:has-text("confirmation")', { state: 'visible', timeout: 5000 }).then(() => 'general-confirmation'),
+      page.waitForSelector('*:has-text("Review your booking")', { state: 'visible', timeout: 5000 }).then(() => 'review-booking'),
+      page.waitForSelector('*:has-text("Appointment details")', { state: 'visible', timeout: 5000 }).then(() => 'appointment-details'),
+      
+      // Wait for the booking button itself
+      page.waitForSelector('button:has-text("Book my appointment"), button:has-text("Book now"), button:has-text("Confirm booking")', { state: 'visible', timeout: 5000 }).then(() => 'book-button'),
+      
+      // Timeout fallback
+      page.waitForTimeout(8000).then(() => 'timeout')
+    ]).catch(() => 'none');
+    
+    log('Confirmation indicator found:', confirmationFound);
     
     // Wait a bit for any animations to complete
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1500);
     
-    // Check if button exists
-    const buttonExists = await page.$('button:has-text("Book my appointment")') !== null;
-    if (!buttonExists) {
-      throw new Error('Book my appointment button not found in DOM');
+    // Check if any booking button exists (flexible search)
+    const bookingButtons = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const bookingButtons = buttons.filter(btn => {
+        const text = btn.textContent?.toLowerCase() || '';
+        return text.includes('book') || text.includes('confirm') || text.includes('submit') || text.includes('continue');
+      });
+      return bookingButtons.map(btn => ({
+        text: btn.textContent?.trim() || '',
+        className: btn.className || '',
+        disabled: btn.disabled || false
+      }));
+    });
+    
+    log('Available booking buttons:', bookingButtons);
+    
+    if (bookingButtons.length === 0) {
+      throw new Error('No booking/confirmation buttons found on page');
     }
-    log('Button exists in DOM');
+    
+    log('Page setup complete, proceeding with booking...');
 
   } catch (setupError) {
     errLog('Setup failed:', setupError.message);
-    await page.screenshot({ path: `setup-error-${Date.now()}.png`, fullPage: true });
+    
+    // Enhanced debugging
+    try {
+      const currentUrl = await page.url();
+      const pageTitle = await page.title();
+      log('Debug - Current URL:', currentUrl);
+      log('Debug - Page title:', pageTitle);
+      
+      await page.screenshot({ path: `setup-error-${Date.now()}.png`, fullPage: true });
+    } catch {}
+    
     throw new Error(`Setup failed: ${setupError.message}`);
   }
 
