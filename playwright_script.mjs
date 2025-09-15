@@ -837,23 +837,8 @@ async function handleUpholstery(page, label, qty, payload, meta) {
   await waitIdle(page, 1500);
   await randomDelay(1000, 2000);
   
-  // Enhanced debugging - capture available options
-  try {
-    log('[upholstery] Capturing available upholstery options for debugging...');
-    const availableOptions = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, [role="button"], .MuiCard-root, .MuiCardActionArea-root'));
-      return buttons.map(btn => ({
-        text: btn.textContent?.trim() || '',
-        className: btn.className || '',
-        tagName: btn.tagName || ''
-      })).filter(item => item.text && item.text.length > 0).slice(0, 20);
-    });
-    log('[upholstery] Available options found:', JSON.stringify(availableOptions, null, 2));
-  } catch (debugError) {
-    warn('[upholstery] Could not capture debug info:', debugError.message);
-  }
 
-  // Enhanced selectors for upholstery items
+  // Enhanced selectors for upholstery items (handles pricing text)
   const selectors = [
     // Exact text matches
     { role: 'button', name: new RegExp(`^\\s*${escRe(label)}\\s*$`, 'i') },
@@ -862,8 +847,7 @@ async function handleUpholstery(page, label, qty, payload, meta) {
     // Button with text
     `button:has-text("${label}")`,
     
-    // Material-UI card components
-    `.MuiCard-root:has-text("${label}")`,
+    // Material-UI card components (primary buttons for this site)
     `.MuiCardActionArea-root:has-text("${label}")`,
     `.MuiButtonBase-root:has-text("${label}")`,
     
@@ -941,7 +925,7 @@ function buildQueue(p) {
 
   if (p.upholstery && (p.upholstery === true || p.upholstery === 'True')) {
     const map = {
-      love_seat: 'Love Seat',
+      love_seat: 'Loveseat',
       couch: 'Couch',
       recliner: 'Recliner',
       small_sectional: 'Small Sectional',

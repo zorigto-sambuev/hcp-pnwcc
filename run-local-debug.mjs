@@ -443,7 +443,7 @@ function buildQueue(p) {
 
   if (p.upholstery) {
     const map = {
-      love_seat: 'Love Seat',
+      love_seat: 'Loveseat',
       couch: 'Couch',
       recliner: 'Recliner',
       small_sectional: 'Small Sectional',
