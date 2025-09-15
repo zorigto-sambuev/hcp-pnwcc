@@ -78,8 +78,8 @@ async function verifySuccess(page) {
     // Also wait for the more specific confirmation message.
     await page.getByText('Your booking was successful.').waitFor({ state: 'visible', timeout: 30000 });
     log('Successfully reached the "Thank you" confirmation page.');
-    return true;
-  } catch (e) {
+        return true;
+      } catch (e) {
 
     warn('Did not reach the "Thank you" confirmation page.------ ()');
     return false;
@@ -135,8 +135,8 @@ async function waitForMainMenu(page) {
         if ((await loc.count()) > 0 && (await loc.isVisible())) return true;
       } catch {}
     }
-    await sleep(200);
-  }
+      await sleep(200);
+    }
   throw new Error('Service menu did not render.');
 }
 
@@ -145,7 +145,7 @@ function escRe(s) {
 }
 
 async function clickService(page, label) {
-  await waitForMainMenu(page);
+    await waitForMainMenu(page);
 
   const re = new RegExp(`\\b${escRe(label)}\\b`, 'i');
 
@@ -247,7 +247,7 @@ async function fillByPlaceholder(page, labelRe, value) {
       const ph = (await el.getAttribute('placeholder')) || '';
       if (labelRe.test(ph)) {
         await el.fill(String(value), { timeout: 3000 });
-        return true;
+    return true;
       }
     }
   } catch {}
@@ -309,7 +309,7 @@ async function selectDate(page, dateStr) {
 
   if (!ok) {
     warn('Could not pick date; you may need month navigation.');
-  } else {
+      } else {
     await waitIdle(page, 250);
   }
 }
@@ -326,7 +326,7 @@ async function selectTimeFrame(page, startTimeStr) {
     page,
     [
       // Prioritize finding a button with the specific role and name.
-      { role: 'button', name: re },
+    { role: 'button', name: re },
       // Fallback to finding any element containing the text.
       { text: re }
     ],
@@ -384,7 +384,7 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     // Strategy 6: JavaScript evaluation click
     async () => {
       log('Strategy 6: JavaScript evaluation click');
-      await page.evaluate(() => {
+    await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const button = buttons.find(btn => btn.textContent.includes('Book my appointment')) ||
                      document.querySelector('.MuiButton-containedPrimary-338');
@@ -395,7 +395,7 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     // Strategy 7: Dispatch click event
     async () => {
       log('Strategy 7: Dispatching click event');
-      await page.evaluate(() => {
+  await page.evaluate(() => {
         const button = Array.from(document.querySelectorAll('button')).find(btn => 
           btn.textContent.includes('Book my appointment'));
         if (button) {
@@ -515,11 +515,11 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
         await waitForNetworkRequests(page);
         
         return { success: true, strategyUsed: strategyIndex, method: `Strategy ${strategyIndex}` };
-      } else {
+              } else {
         log(`❌ Strategy ${strategyIndex} didn't trigger expected response`);
       }
       
-    } catch (error) {
+            } catch (error) {
       log(`❌ Strategy ${strategyIndex} failed:`, error.message);
       lastError = error;
       
@@ -546,7 +546,7 @@ async function checkClickSuccess(page) {
   try {
     // Check for common success indicators
     const indicators = await page.evaluate(() => {
-      return {
+              return { 
         // Check for loading states
         hasLoadingSpinner: !!document.querySelector('[class*="loading"], [class*="spinner"], [class*="progress"]'),
         
@@ -577,8 +577,8 @@ async function checkClickSuccess(page) {
            indicators.hasSuccessModal || 
            indicators.buttonDisabled ||
            indicators.hasThankYou;
-           
-  } catch (error) {
+        
+      } catch (error) {
     log('Could not check success indicators:', error.message);
     return false;
   }
@@ -651,7 +651,7 @@ async function finalizeThisService(page, payload, { isLast }) {
     } catch {}
     
     warn('[finalize] No "Add to booking" visible—may be auto-added or service not selected properly.');
-  } else {
+    } else {
     log('[finalize] Successfully added to booking.');
   }
 
@@ -665,7 +665,7 @@ async function finalizeThisService(page, payload, { isLast }) {
   const bookServiceSelectors = [
     { role: 'button', name: /book service/i },
     { text: /book service/i },
-    { role: 'button', name: /book now/i },
+      { role: 'button', name: /book now/i },
     { role: 'button', name: /book my appointment/i },
     { role: 'button', name: /proceed/i },
     { role: 'button', name: /continue$/i },
@@ -832,7 +832,7 @@ async function handleUpholstery(page, label, qty, payload, meta) {
   log(`[upholstery] Starting upholstery handling for: ${label}, qty: ${qty}`);
   
   await clickService(page, 'Upholstery');
-  
+
   // Wait longer for upholstery options to load
   await waitIdle(page, 1500);
   await randomDelay(1000, 2000);
@@ -893,7 +893,7 @@ async function handleUpholstery(page, label, qty, payload, meta) {
     // Stop execution to prevent cascade failures
     throw new Error(`Failed to select upholstery item "${label}". Cannot continue with empty cart.`);
   }
-  
+
   log(`[upholstery] Successfully selected: ${label}`);
 
   // Handle quantity if needed
@@ -926,7 +926,7 @@ async function handleCarpetStretching(page, payload, meta) {
 /** ======= Queue builder ======= */
 function buildQueue(p) {
   const q = [];
-  
+
   log('[queue] Building queue from payload:', JSON.stringify(p, null, 2));
 
   if (p.carpet_cleaning && (p.carpet_cleaning === true || p.carpet_cleaning === 'True')) {
@@ -986,17 +986,17 @@ const proxyConfig = {
 async function main() {
   const payload = JSON.parse(PAYLOAD_JSON_STRING || '{}');
   log('[loader] Using payload from environment variable');
-
+  
   const browser = await chromium.launch({
-  headless: HEADLESS,
+    headless: HEADLESS,
   Proxy : proxyConfig,
-  slowMo: SLOWMO,
+    slowMo: SLOWMO,
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
-    '--no-first-run',
+      '--no-first-run',
     '--no-zygote',
     '--single-process',
     '--disable-gpu',
@@ -1004,7 +1004,7 @@ async function main() {
     // Anti-bot detection
     '--disable-blink-features=AutomationControlled',
     '--disable-features=VizDisplayCompositor',
-    '--disable-web-security',
+      '--disable-web-security',
     '--disable-features=TranslateUI',
     '--disable-ipc-flooding-protection',
     '--disable-renderer-backgrounding',
@@ -1024,12 +1024,12 @@ async function main() {
   ]
 });
 
-const context = await browser.newContext({
+  const context = await browser.newContext({
   viewport: { width: 1920, height: 1080 },
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7103.48 Safari/537.36',
-  locale: 'en-US',
+    locale: 'en-US',
   timezoneId: 'America/Los_Angeles',
-  permissions: ['geolocation'],
+    permissions: ['geolocation'],
   geolocation: { longitude: -118.2437, latitude: 34.0522 }, 
   colorScheme: 'light'
 });
@@ -1037,23 +1037,23 @@ const context = await browser.newContext({
 // Remove webdriver detection
 await context.addInitScript(() => {
   // Remove webdriver property
-  Object.defineProperty(navigator, 'webdriver', {
+        Object.defineProperty(navigator, 'webdriver', {
     get: () => undefined,
-  });
-  
+        });
+    
   // Remove automation flags
   delete window.chrome.runtime.onConnect;
   
   // Mock human-like properties
-  Object.defineProperty(navigator, 'plugins', {
+    Object.defineProperty(navigator, 'plugins', {
     get: () => [1, 2, 3, 4, 5],
   });
   
-  Object.defineProperty(navigator, 'languages', {
-    get: () => ['en-US', 'en'],
-  });
-  
-  // Add realistic screen properties
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en'],
+    });
+    
+    // Add realistic screen properties
   Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
   Object.defineProperty(screen, 'availHeight', { get: () => 1080 });
 });
@@ -1064,7 +1064,7 @@ await context.addInitScript(() => {
 
   try {
     log('[nav]', START_URL);
-    await page.goto(START_URL, { waitUntil: 'load', timeout: 45000 });
+        await page.goto(START_URL, { waitUntil: 'load', timeout: 45000 });
     await waitIdle(page, 600);
     await randomDelay(1000, 4500); // Add delay here
 
