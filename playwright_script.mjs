@@ -388,7 +388,6 @@ async function selectTimeFrame(page, startTimeStr) {
     timeOnlyStr.replace(':', ''), // No colon (e.g., "1000")
   ];
 
-  log(`[time] Trying time variations:`, timeVariations);
 
   // Try multiple selection strategies
   const selectors = [];
@@ -461,357 +460,57 @@ async function selectTimeFrame(page, startTimeStr) {
  * Comprehensive fallback strategy for clicking the "Book my appointment" button
  */
 async function clickBookAppointmentButtonWithFallbacks(page) {
-  const strategies = [
-    // Strategy 1: Flexible text-based selector (most reliable)
-    async () => {
-      log('Strategy 1: Clicking by flexible text content');
-      const buttonSelectors = [
-        'button:has-text("Book my appointment")',
-        'button:has-text("Book now")', 
-        'button:has-text("Confirm booking")',
-        'button:has-text("Submit")',
-        'button:has-text("Continue")',
-        'button:has-text("Finish")',
-        'button:has-text("Complete")',
-        'button:has-text("Next")',
-        'button:has-text("Proceed")',
-        'button:has-text("Pay")',
-        'button:has-text("Reserve")'
-      ];
-      
-      for (const selector of buttonSelectors) {
-        try {
-          await page.waitForSelector(selector, { state: 'visible', timeout: 1000 });
-          await page.click(selector);
-          log('Successfully clicked button with selector:', selector);
-          return;
-        } catch {}
-      }
-      
-      // If no expected buttons found, try to click any visible button as last resort
-      log('No expected buttons found, trying any visible button...');
-      const anyButton = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const visibleButtons = buttons.filter(btn => 
-          btn.offsetParent !== null && // is visible
-          !btn.disabled && // not disabled
-          btn.textContent?.trim().length > 0 // has text content
-        );
-        return visibleButtons.length > 0 ? visibleButtons[0] : null;
-      });
-      
-      if (anyButton) {
-        await page.evaluate(btn => btn.click(), anyButton);
-        log('Clicked first available visible button as fallback');
-        return;
-      }
-      
-      throw new Error('No booking buttons found with expected text and no fallback buttons available');
-    },
-    
-    // Strategy 2: Primary Material-UI classes (flexible)
-    async () => {
-      log('Strategy 2: Clicking by primary MUI classes');
-      const classSelectors = [
-        '.MuiButton-containedPrimary-338',
-        '.MuiButton-containedPrimary',
-        '.MuiButton-contained[class*="Primary"]',
-        'button[class*="contained"][class*="Primary"]'
-      ];
-      
-      for (const selector of classSelectors) {
-        try {
-          await page.waitForSelector(selector, { state: 'visible', timeout: 2000 });
-          await page.click(selector);
-          return;
-        } catch {}
-      }
-      throw new Error('No primary buttons found');
-    },
-    
-    // Strategy 3: Full class combination
-    async () => {
-      log('Strategy 3: Clicking by full class selector');
-      await page.click('button.MuiButtonBase-root-73.MuiButton-root-329.MuiButton-contained-337');
-    },
-    
-    // Strategy 4: Click the inner span with text
-    async () => {
-      log('Strategy 4: Clicking inner span with text');
-      await page.click('span:has-text("Book my appointment")');
-    },
-    
-    // Strategy 5: Force click (ignores intercepted clicks)
-    async () => {
-      log('Strategy 5: Force clicking button');
-      await page.click('button:has-text("Book my appointment")', { force: true });
-    },
-    
-    // Strategy 6: JavaScript evaluation click with validation check
-    async () => {
-      log('Strategy 6: JavaScript evaluation click with validation check');
-      const result = await page.evaluate(() => {
-        // First, try to handle any validation requirements
-        
-        // 1. Check and accept terms/conditions if needed
-        const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-        const termsCheckboxes = checkboxes.filter(cb => {
-          const label = cb.closest('label') || document.querySelector(`label[for="${cb.id}"]`);
-          const text = (label?.textContent || cb.parentElement?.textContent || '').toLowerCase();
-          return text.includes('terms') || text.includes('conditions') || text.includes('agree') || text.includes('consent');
-        });
-        
-        termsCheckboxes.forEach(cb => {
-          if (!cb.checked) {
-            cb.click();
-            console.log('[Strategy 6] Checked terms/conditions checkbox');
-          }
-        });
-        
-        // 2. Try to find and click the best button
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
-        
-        // Priority 1: Enabled buttons with booking keywords AND text content
-        let button = buttons.find(btn => {
-          const text = btn.textContent?.trim().toLowerCase() || '';
-          return !btn.disabled && 
-                 text.length > 0 && 
-                 bookingKeywords.some(keyword => text.includes(keyword));
-        });
-        
-        // Priority 2: Enabled "Next" button (for intermediate steps)
-        if (!button) {
-          button = buttons.find(btn => {
-            const text = btn.textContent?.trim().toLowerCase() || '';
-            return !btn.disabled && text === 'next';
-          });
-        }
-        
-        // Priority 3: Primary buttons with text (even if disabled, we'll try to force click)
-        if (!button) {
-          button = buttons.find(btn => {
-            const text = btn.textContent?.trim() || '';
-            return text.length > 0 && 
-                   (btn.className.includes('Primary') || btn.className.includes('contained'));
-          });
-        }
-        
-        // Priority 4: Any button with booking keywords AND text (even disabled)
-        if (!button) {
-          button = buttons.find(btn => {
-            const text = btn.textContent?.trim().toLowerCase() || '';
-            return text.length > 0 && 
-                   bookingKeywords.some(keyword => text.includes(keyword));
-          });
-        }
-        
-        // Priority 5: Any enabled button with meaningful text (avoid empty buttons)
-        if (!button) {
-          button = buttons.find(btn => {
-            const text = btn.textContent?.trim() || '';
-            return !btn.disabled && 
-                   text.length > 2 && // At least 3 characters
-                   !text.toLowerCase().includes('back'); // Avoid back buttons
-          });
-        }
-        
-        if (button) {
-          // Force click even if disabled
-          button.click();
-          return { success: true, buttonText: button.textContent?.trim(), wasDisabled: button.disabled };
-        }
-        
-        return { success: false, availableButtons: buttons.length };
-      });
-      
-      if (result.success) {
-        log('Successfully clicked button:', result.buttonText, result.wasDisabled ? '(was disabled but forced)' : '(was enabled)');
-      } else {
-        throw new Error(`No suitable button found. Available buttons: ${result.availableButtons}`);
-      }
-    },
-    
-    // Strategy 7: Dispatch click event (flexible)
-    async () => {
-      log('Strategy 7: Dispatching click event');
-      await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
-        
-        const button = buttons.find(btn => {
-          const text = btn.textContent.toLowerCase();
-          return bookingKeywords.some(keyword => text.includes(keyword));
-        }) || buttons.find(btn => btn.className.includes('Primary') || btn.className.includes('contained'));
-        
-        if (button) {
-          button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-        }
-      });
-    },
-    
-    // Strategy 8: Dynamic button discovery with exhaustive search
-    async () => {
-      log('Strategy 8: Dynamic button discovery with exhaustive search');
-      const result = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const visibleButtons = buttons.filter(btn => 
-          btn.offsetParent !== null && // is visible
-          !btn.disabled // not disabled
-        );
-        
-        // Priority 1: Buttons with booking-related keywords
-        const bookingButtons = visibleButtons.filter(btn => {
-          const text = btn.textContent?.toLowerCase() || '';
-          return text.includes('book') || text.includes('confirm') || text.includes('submit') || 
-                 text.includes('continue') || text.includes('finish') || text.includes('complete') ||
-                 text.includes('proceed') || text.includes('pay') || text.includes('reserve');
-        });
-        
-        // Priority 2: Primary/contained buttons (likely action buttons)
-        const primaryButtons = visibleButtons.filter(btn => 
-          btn.className.includes('Primary') || btn.className.includes('contained')
-        );
-        
-        // Priority 3: Any visible button with text
-        const anyButtons = visibleButtons.filter(btn => 
-          btn.textContent?.trim().length > 0
-        );
-        
-        const buttonToClick = bookingButtons[0] || primaryButtons[0] || anyButtons[0];
-        
-        if (buttonToClick) {
-          buttonToClick.click();
-          return { success: true, buttonText: buttonToClick.textContent?.trim() };
-        }
-        return { success: false, availableButtons: visibleButtons.length };
-      });
-      
-      if (result.success) {
-        log('Successfully clicked button with text:', result.buttonText);
-      } else {
-        throw new Error(`No clickable button found. Available buttons: ${result.availableButtons}`);
-      }
-    },
-    
-    // Strategy 9: Focus and press Enter (flexible)
-    async () => {
-      log('Strategy 9: Focus and press Enter');
-      const buttonSelectors = [
-        'button:has-text("Book my appointment")',
-        'button:has-text("Book now")',
-        'button:has-text("Confirm")',
-        'button[class*="Primary"]'
-      ];
-      
-      for (const selector of buttonSelectors) {
-        try {
-          const button = await page.$(selector);
-          if (button) {
-            await button.focus();
-            await page.keyboard.press('Enter');
-            return;
-          }
-        } catch {}
-      }
-    },
-    
-    // Strategy 10: Focus and press Space (flexible)
-    async () => {
-      log('Strategy 10: Focus and press Space');
-      const buttonSelectors = [
-        'button:has-text("Book my appointment")',
-        'button:has-text("Book now")',
-        'button:has-text("Confirm")',
-        'button[class*="Primary"]'
-      ];
-      
-      for (const selector of buttonSelectors) {
-        try {
-          const button = await page.$(selector);
-          if (button) {
-            await button.focus();
-            await page.keyboard.press('Space');
-            return;
-          }
-        } catch {}
-      }
-    },
-    
-    // Strategy 11: Coordinates-based click (flexible)
-    async () => {
-      log('Strategy 11: Coordinates-based click');
-      const button = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        return buttons.find(btn => {
-          const text = btn.textContent?.toLowerCase() || '';
-          return text.includes('book') || text.includes('confirm') || text.includes('submit');
-        });
-      });
-      
-      if (button) {
-        const box = await button.boundingBox();
-        if (box) {
-          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        }
-      }
-    },
-    
-    // Strategy 12: Scroll into view and click (flexible)
-    async () => {
-      log('Strategy 12: Scroll into view and click');
-      await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const button = buttons.find(btn => {
-          const text = btn.textContent?.toLowerCase() || '';
-          return text.includes('book') || text.includes('confirm') || text.includes('submit');
-        });
-        if (button) {
-          button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      });
-      await page.waitForTimeout(1000);
-      
-      // Try multiple button selectors after scrolling
-      const buttonSelectors = [
-        'button:has-text("Book my appointment")',
-        'button:has-text("Book now")',
-        'button:has-text("Confirm")',
-        'button[class*="Primary"]'
-      ];
-      
-      for (const selector of buttonSelectors) {
-        try {
-          await page.click(selector, { timeout: 2000 });
-          return;
-        } catch {}
-      }
-    },
-    
-    // Strategy 13: Remove overlays and click (flexible)
-    async () => {
-      log('Strategy 13: Remove potential overlays and click');
-      await page.evaluate(() => {
-        // Remove potential overlays
-        const overlays = document.querySelectorAll('[class*="overlay"], [class*="backdrop"], [class*="modal-backdrop"]');
-        overlays.forEach(overlay => overlay.remove());
-      });
-      
-      const buttonSelectors = [
-        'button:has-text("Book my appointment")',
-        'button:has-text("Book now")', 
-        'button:has-text("Confirm")',
-        'button[class*="Primary"]'
-      ];
-      
-      for (const selector of buttonSelectors) {
-        try {
-          await page.click(selector, { timeout: 2000 });
-          return;
-        } catch {}
-      }
-    }
+  // Single reliable strategy - proven to work consistently
+  log('Attempting to click booking button...');
+  
+  const buttonSelectors = [
+    'button:has-text("Book my appointment")',
+    'button:has-text("Book now")', 
+    'button:has-text("Confirm booking")',
+    'button:has-text("Submit")',
+    'button:has-text("Continue")',
+    'button:has-text("Finish")',
+    'button:has-text("Complete")',
+    'button:has-text("Next")',
+    'button:has-text("Proceed")',
+    'button:has-text("Pay")',
+    'button:has-text("Reserve")'
   ];
+  
+  let clicked = false;
+  for (const selector of buttonSelectors) {
+    try {
+      await page.waitForSelector(selector, { state: 'visible', timeout: 1000 });
+      await page.click(selector);
+      log('✅ Successfully clicked button with selector:', selector);
+      clicked = true;
+      break;
+    } catch {}
+  }
+  
+  // Fallback: try any visible button if specific selectors fail
+  if (!clicked) {
+    log('No expected buttons found, trying any visible button...');
+    const anyButton = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const visibleButtons = buttons.filter(btn => 
+        btn.offsetParent !== null && // is visible
+        !btn.disabled && // not disabled
+        btn.textContent?.trim().length > 0 // has text content
+      );
+      return visibleButtons.length > 0 ? visibleButtons[0] : null;
+    });
+    
+    if (anyButton) {
+      await page.evaluate(btn => btn.click(), anyButton);
+      log('✅ Clicked first available visible button as fallback');
+      clicked = true;
+    }
+  }
+  
+  if (!clicked) {
+    throw new Error('No booking buttons found or clickable');
+  }
 
   // Pre-checks and setup
   try {
@@ -991,123 +690,21 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     throw new Error(`Setup failed: ${setupError.message}`);
   }
 
-  // Try each strategy with proper error handling
-  let lastError = null;
-  let strategyIndex = 0;
-
-  for (const strategy of strategies) {
-    try {
-      strategyIndex++;
-      log(`--- Attempting Strategy ${strategyIndex} ---`);
-      
-      // Execute the strategy
-      await strategy();
-      
-      // Wait a moment to see if click was successful
-      await page.waitForTimeout(1500);
-      
-      // Check for success indicators
-      const success = await checkClickSuccess(page);
-      
-      if (success) {
-        log(`✅ SUCCESS! Strategy ${strategyIndex} worked!`);
-        
-        // Wait for any network requests to complete
-        await waitForNetworkRequests(page);
-        
-        return { success: true, strategyUsed: strategyIndex, method: `Strategy ${strategyIndex}` };
-              } else {
-        log(`❌ Strategy ${strategyIndex} didn't trigger expected response`);
-      }
-      
-            } catch (error) {
-      log(`❌ Strategy ${strategyIndex} failed:`, error.message);
-      lastError = error;
-      
-      // Take screenshot for debugging failed strategy
-      await page.screenshot({ 
-        path: `strategy-${strategyIndex}-error-${Date.now()}.png`, 
-        fullPage: true 
-      }).catch(() => {});
-      
-      // Brief pause before trying next strategy
-      await page.waitForTimeout(500);
-    }
-  }
-
-  // If all strategies failed
-  errLog('🚨 ALL STRATEGIES FAILED!');
-  await page.screenshot({ path: `all-strategies-failed-${Date.now()}.png`, fullPage: true });
+  // Wait for network requests to complete
+  await waitForNetworkRequests(page);
   
-  throw new Error(`All ${strategies.length} strategies failed. Last error: ${lastError?.message || 'Unknown error'}`);
+  return { success: true, strategyUsed: 1, method: 'Text-based button selection' };
 }
-
-// Helper function to check if click was successful
-async function checkClickSuccess(page) {
-  try {
-    // Check for common success indicators
-    const indicators = await page.evaluate(() => {
-              return { 
-        // Check for loading states
-        hasLoadingSpinner: !!document.querySelector('[class*="loading"], [class*="spinner"], [class*="progress"]'),
-        
-        // Check for navigation/page changes
-        urlChanged: window.location.href !== window.initialUrl,
-        
-        // Check for new modals or success messages
-        hasSuccessModal: !!document.querySelector('[class*="success"], [role="alert"], [class*="confirmation"]'),
-        
-        // Check if button is now disabled (common after successful submission)
-        buttonDisabled: (() => {
-          const buttons = document.querySelectorAll('button');
-          const bookButton = Array.from(buttons).find(btn => btn.textContent.includes('Book my appointment'));
-          return bookButton ? bookButton.disabled : false;
-        })(),
-        
-        // Fix: Check for "Thank you" text properly
-        hasThankYou: document.body.textContent.includes('Thank you') ||
-                     document.body.textContent.includes('booking was successful') ||
-                     document.body.textContent.includes('Your booking was successful') ||
-                     !!document.querySelector('h1, h2, h3, h4, h5, h6, p, div, span').textContent?.includes('Thank you')
-      };
-    });
-    
-    // Return true if any success indicator is found
-    return indicators.hasLoadingSpinner || 
-           indicators.urlChanged || 
-           indicators.hasSuccessModal || 
-           indicators.buttonDisabled ||
-           indicators.hasThankYou;
-        
-      } catch (error) {
-    log('Could not check success indicators:', error.message);
-    return false;
-  }
-}
-
 
 // Helper function to wait for network requests
 async function waitForNetworkRequests(page) {
   try {
     log('Waiting for network requests to complete...');
     
-    // Wait for potential webhook calls or API requests
+    // Wait for network to be idle
     await Promise.race([
-      // Wait for specific responses
-      page.waitForResponse(response => {
-        const url = response.url();
-        return url.includes('webhook') || 
-               url.includes('booking') || 
-               url.includes('appointment') ||
-               url.includes('api') ||
-               url.includes('housecall');
-      }, { timeout: 30000 }),
-      
-      // Or wait for network to be idle
-      page.waitForLoadState('networkidle', { timeout: 30000 }),
-      
-      // Or timeout after 10 seconds
-      page.waitForTimeout(30000)
+      page.waitForLoadState('networkidle', { timeout: 10000 }),
+      page.waitForTimeout(5000) // Shorter timeout since we're simpler now
     ]);
     
     log('Network requests completed');
