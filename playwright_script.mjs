@@ -349,27 +349,106 @@ async function selectDate(page, dateStr) {
 }
 
 async function selectTimeFrame(page, startTimeStr) {
-  // First, strip " AM" or " PM" from the input string to get just the time.
+  if (!startTimeStr) {
+    warn('[time] No time frame specified, skipping time selection');
+    return;
+  }
+
+  log(`[time] Attempting to select time frame: "${startTimeStr}"`);
+  
+  // Wait for time selection to be available
+  await waitIdle(page, 1000);
+  
+  // First, try to find any available time slots for debugging
+  try {
+    const availableTimeSlots = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const timeButtons = buttons.filter(btn => {
+        const text = btn.textContent || '';
+        return text.match(/\d+:\d+/) || text.toLowerCase().includes('am') || text.toLowerCase().includes('pm');
+      });
+      return timeButtons.map(btn => ({
+        text: btn.textContent?.trim(),
+        disabled: btn.disabled,
+        className: btn.className
+      })).slice(0, 10); // Show first 10 for debugging
+    });
+    
+    log('[time] Available time slots found:', availableTimeSlots);
+  } catch (e) {
+    log('[time] Could not retrieve available time slots for debugging');
+  }
+
+  // Create multiple variations of the time to search for
   const timeOnlyStr = startTimeStr.replace(/\s*(?:AM|PM)$/i, '');
+  const timeVariations = [
+    startTimeStr, // Original format (e.g., "10:00 AM")
+    timeOnlyStr,  // Without AM/PM (e.g., "10:00")
+    startTimeStr.replace(/\s+/g, ''), // No spaces (e.g., "10:00AM")
+    timeOnlyStr.replace(':', ''), // No colon (e.g., "1000")
+  ];
 
-  // Now, create a flexible regular expression that looks for the time followed by a hyphen.
-  // We use `\s*` to allow for any whitespace between the time and the hyphen.
-  const re = new RegExp(`^\\s*${escRe(timeOnlyStr)}\\s*-`, 'i');
+  log(`[time] Trying time variations:`, timeVariations);
 
-  const ok = await tryClick(
-    page,
-    [
-      // Prioritize finding a button with the specific role and name.
-    { role: 'button', name: re },
-      // Fallback to finding any element containing the text.
-      { text: re }
-    ],
-    'timeframe'
-  );
+  // Try multiple selection strategies
+  const selectors = [];
+  
+  for (const timeVar of timeVariations) {
+    const escapedTime = escRe(timeVar);
+    selectors.push(
+      // Direct text match
+      { text: new RegExp(escapedTime, 'i') },
+      { role: 'button', name: new RegExp(escapedTime, 'i') },
+      
+      // With dash/hyphen (time ranges)
+      { text: new RegExp(`${escapedTime}\\s*[-–]`, 'i') },
+      { role: 'button', name: new RegExp(`${escapedTime}\\s*[-–]`, 'i') },
+      
+      // CSS selectors
+      `button:has-text("${timeVar}")`,
+      `[role="button"]:has-text("${timeVar}")`,
+    );
+  }
+
+  log(`[time] Attempting to click time frame with ${selectors.length} different selectors...`);
+  const ok = await tryClick(page, selectors, 'timeframe');
 
   if (!ok) {
-    warn(`Could not select time frame starting "${startTimeStr}"`);
+    errLog(`[time] CRITICAL: Could not select time frame "${startTimeStr}"`);
+    
+    // Try to select ANY available time slot as fallback
+    log('[time] Trying to select first available time slot as fallback...');
+    const fallbackSelected = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const timeButtons = buttons.filter(btn => {
+        const text = btn.textContent || '';
+        return !btn.disabled && (text.match(/\d+:\d+/) || text.toLowerCase().includes('am') || text.toLowerCase().includes('pm'));
+      });
+      
+      if (timeButtons.length > 0) {
+        timeButtons[0].click();
+        return { success: true, selected: timeButtons[0].textContent?.trim() };
+      }
+      return { success: false };
+    });
+    
+    if (fallbackSelected.success) {
+      log(`[time] Successfully selected fallback time slot: "${fallbackSelected.selected}"`);
+    } else {
+      errLog('[time] No time slots available or selectable');
+      
+      // Take debug screenshot
+      try {
+        await page.screenshot({ path: `time-selection-failed-${Date.now()}.png`, fullPage: true });
+        log('[time] Debug screenshot saved for time selection failure');
+      } catch {}
+    }
+  } else {
+    log(`[time] Successfully selected time frame: "${startTimeStr}"`);
   }
+  
+  // Wait for selection to process
+  await waitIdle(page, 500);
 }
 
 /**
@@ -493,24 +572,47 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
         const buttons = Array.from(document.querySelectorAll('button'));
         const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
         
-        // Priority 1: Enabled buttons with booking keywords
+        // Priority 1: Enabled buttons with booking keywords AND text content
         let button = buttons.find(btn => {
-          const text = btn.textContent.toLowerCase();
-          return !btn.disabled && bookingKeywords.some(keyword => text.includes(keyword));
+          const text = btn.textContent?.trim().toLowerCase() || '';
+          return !btn.disabled && 
+                 text.length > 0 && 
+                 bookingKeywords.some(keyword => text.includes(keyword));
         });
         
-        // Priority 2: Primary buttons (even if disabled, we'll try to force click)
-        if (!button) {
-          button = buttons.find(btn => 
-            btn.className.includes('Primary') || btn.className.includes('contained')
-          );
-        }
-        
-        // Priority 3: Any button with booking keywords (even disabled)
+        // Priority 2: Enabled "Next" button (for intermediate steps)
         if (!button) {
           button = buttons.find(btn => {
-            const text = btn.textContent.toLowerCase();
-            return bookingKeywords.some(keyword => text.includes(keyword));
+            const text = btn.textContent?.trim().toLowerCase() || '';
+            return !btn.disabled && text === 'next';
+          });
+        }
+        
+        // Priority 3: Primary buttons with text (even if disabled, we'll try to force click)
+        if (!button) {
+          button = buttons.find(btn => {
+            const text = btn.textContent?.trim() || '';
+            return text.length > 0 && 
+                   (btn.className.includes('Primary') || btn.className.includes('contained'));
+          });
+        }
+        
+        // Priority 4: Any button with booking keywords AND text (even disabled)
+        if (!button) {
+          button = buttons.find(btn => {
+            const text = btn.textContent?.trim().toLowerCase() || '';
+            return text.length > 0 && 
+                   bookingKeywords.some(keyword => text.includes(keyword));
+          });
+        }
+        
+        // Priority 5: Any enabled button with meaningful text (avoid empty buttons)
+        if (!button) {
+          button = buttons.find(btn => {
+            const text = btn.textContent?.trim() || '';
+            return !btn.disabled && 
+                   text.length > 2 && // At least 3 characters
+                   !text.toLowerCase().includes('back'); // Avoid back buttons
           });
         }
         
@@ -819,6 +921,55 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       if (commonIssues.length > 0) {
         log('🚨 Potential validation issues preventing booking:');
         commonIssues.forEach((issue, i) => log(`   ${i + 1}. ${issue}`));
+        
+        // Try to automatically fix common validation issues
+        log('🔧 Attempting to automatically fix validation issues...');
+        
+        const fixAttempts = await page.evaluate(() => {
+          const fixes = [];
+          
+          // 1. Try to select a time slot if none selected
+          const timeButtons = Array.from(document.querySelectorAll('button')).filter(btn => {
+            const text = btn.textContent || '';
+            return !btn.disabled && (text.match(/\d+:\d+/) || text.toLowerCase().includes('am') || text.toLowerCase().includes('pm'));
+          });
+          
+          if (timeButtons.length > 0) {
+            timeButtons[0].click();
+            fixes.push(`Selected time slot: "${timeButtons[0].textContent?.trim()}"`);
+          }
+          
+          // 2. Check required checkboxes
+          const uncheckedRequired = Array.from(document.querySelectorAll('input[type="checkbox"][required]')).filter(cb => !cb.checked);
+          uncheckedRequired.forEach(cb => {
+            cb.click();
+            fixes.push('Checked required checkbox');
+          });
+          
+          // 3. Check terms/consent checkboxes
+          const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+          const termsCheckboxes = checkboxes.filter(cb => {
+            const label = cb.closest('label') || document.querySelector(`label[for="${cb.id}"]`);
+            const text = (label?.textContent || cb.parentElement?.textContent || '').toLowerCase();
+            return !cb.checked && (text.includes('terms') || text.includes('conditions') || text.includes('agree') || text.includes('consent'));
+          });
+          termsCheckboxes.forEach(cb => {
+            cb.click();
+            fixes.push('Checked terms/consent checkbox');
+          });
+          
+          return fixes;
+        });
+        
+        if (fixAttempts.length > 0) {
+          log('✅ Applied validation fixes:');
+          fixAttempts.forEach((fix, i) => log(`   ${i + 1}. ${fix}`));
+          
+          // Wait for fixes to process
+          await page.waitForTimeout(1500);
+        } else {
+          log('❌ No automatic fixes could be applied');
+        }
       }
     }
     
