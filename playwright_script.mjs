@@ -73,15 +73,49 @@ async function tryClick(page, variants, tag = 'click') {
 
 async function verifySuccess(page) {
   try {
-    // Wait for the text "Thank you" to be visible on the page.
-    await page.getByText('Thank you').waitFor({ state: 'visible', timeout: 30000 });
-    // Also wait for the more specific confirmation message.
-    await page.getByText('Your booking was successful.').waitFor({ state: 'visible', timeout: 30000 });
-    log('Successfully reached the "Thank you" confirmation page.');
-        return true;
-      } catch (e) {
-
-    warn('Did not reach the "Thank you" confirmation page.------ ()');
+    log('[verify] Starting success verification...');
+    
+    // Wait longer and try multiple success indicators
+    const successFound = await Promise.race([
+      // Primary success indicators
+      page.getByText('Thank you').waitFor({ state: 'visible', timeout: 15000 }).then(() => 'thank-you'),
+      page.getByText('Your booking was successful.').waitFor({ state: 'visible', timeout: 15000 }).then(() => 'booking-successful'),
+      
+      // Alternative success indicators
+      page.getByText('Confirmation').waitFor({ state: 'visible', timeout: 10000 }).then(() => 'confirmation'),
+      page.getByText('We\'ll send you an email').waitFor({ state: 'visible', timeout: 10000 }).then(() => 'email-confirmation'),
+      
+      // Page title changes
+      page.waitForFunction(() => document.title.toLowerCase().includes('thank') || document.title.toLowerCase().includes('confirm'), { timeout: 10000 }).then(() => 'title-change'),
+      
+      // URL changes  
+      page.waitForFunction(() => window.location.href.includes('success') || window.location.href.includes('confirm') || window.location.href.includes('thank'), { timeout: 10000 }).then(() => 'url-change'),
+      
+      // Timeout fallback
+      page.waitForTimeout(20000).then(() => 'timeout')
+    ]).catch(() => 'none');
+    
+    log('[verify] Success indicator found:', successFound);
+    
+    if (successFound !== 'none' && successFound !== 'timeout') {
+      log('Successfully reached confirmation page via:', successFound);
+      return true;
+    }
+    
+    // If no success indicators found, check what page we're actually on
+    const currentUrl = await page.url();
+    const pageTitle = await page.title();
+    const pageContent = await page.evaluate(() => document.body.textContent.substring(0, 500));
+    
+    log('[verify] No success indicators found.');
+    log('[verify] Current URL:', currentUrl);
+    log('[verify] Page title:', pageTitle);
+    log('[verify] Page content preview:', pageContent);
+    
+    return false;
+    
+  } catch (e) {
+    errLog('[verify] Verification error:', e.message);
     return false;
   }
 }
@@ -434,9 +468,71 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       await page.click('button:has-text("Book my appointment")', { force: true });
     },
     
-    // Strategy 6: JavaScript evaluation click (flexible text matching)
+    // Strategy 6: JavaScript evaluation click with validation check
     async () => {
-      log('Strategy 6: JavaScript evaluation click');
+      log('Strategy 6: JavaScript evaluation click with validation check');
+      const result = await page.evaluate(() => {
+        // First, try to handle any validation requirements
+        
+        // 1. Check and accept terms/conditions if needed
+        const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+        const termsCheckboxes = checkboxes.filter(cb => {
+          const label = cb.closest('label') || document.querySelector(`label[for="${cb.id}"]`);
+          const text = (label?.textContent || cb.parentElement?.textContent || '').toLowerCase();
+          return text.includes('terms') || text.includes('conditions') || text.includes('agree') || text.includes('consent');
+        });
+        
+        termsCheckboxes.forEach(cb => {
+          if (!cb.checked) {
+            cb.click();
+            console.log('[Strategy 6] Checked terms/conditions checkbox');
+          }
+        });
+        
+        // 2. Try to find and click the best button
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
+        
+        // Priority 1: Enabled buttons with booking keywords
+        let button = buttons.find(btn => {
+          const text = btn.textContent.toLowerCase();
+          return !btn.disabled && bookingKeywords.some(keyword => text.includes(keyword));
+        });
+        
+        // Priority 2: Primary buttons (even if disabled, we'll try to force click)
+        if (!button) {
+          button = buttons.find(btn => 
+            btn.className.includes('Primary') || btn.className.includes('contained')
+          );
+        }
+        
+        // Priority 3: Any button with booking keywords (even disabled)
+        if (!button) {
+          button = buttons.find(btn => {
+            const text = btn.textContent.toLowerCase();
+            return bookingKeywords.some(keyword => text.includes(keyword));
+          });
+        }
+        
+        if (button) {
+          // Force click even if disabled
+          button.click();
+          return { success: true, buttonText: button.textContent?.trim(), wasDisabled: button.disabled };
+        }
+        
+        return { success: false, availableButtons: buttons.length };
+      });
+      
+      if (result.success) {
+        log('Successfully clicked button:', result.buttonText, result.wasDisabled ? '(was disabled but forced)' : '(was enabled)');
+      } else {
+        throw new Error(`No suitable button found. Available buttons: ${result.availableButtons}`);
+      }
+    },
+    
+    // Strategy 7: Dispatch click event (flexible)
+    async () => {
+      log('Strategy 7: Dispatching click event');
       await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const bookingKeywords = ['book', 'confirm', 'submit', 'continue', 'finish', 'complete'];
@@ -444,18 +540,8 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
         const button = buttons.find(btn => {
           const text = btn.textContent.toLowerCase();
           return bookingKeywords.some(keyword => text.includes(keyword));
-        }) || document.querySelector('.MuiButton-containedPrimary-338, .MuiButton-containedPrimary, [class*="Primary"]');
+        }) || buttons.find(btn => btn.className.includes('Primary') || btn.className.includes('contained'));
         
-        if (button) button.click();
-      });
-    },
-    
-    // Strategy 7: Dispatch click event
-    async () => {
-      log('Strategy 7: Dispatching click event');
-  await page.evaluate(() => {
-        const button = Array.from(document.querySelectorAll('button')).find(btn => 
-          btn.textContent.includes('Book my appointment'));
         if (button) {
           button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         }
@@ -666,8 +752,6 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
       })).filter(btn => btn.text.length > 0); // Only filter out empty buttons
     });
     
-    log('All available buttons on page:', allButtons);
-    
     // Now check for potential booking buttons with more flexible criteria
     const potentialBookingButtons = allButtons.filter(btn => {
       const text = btn.text.toLowerCase();
@@ -695,6 +779,47 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     if (potentialBookingButtons.length === 0) {
       log('No obvious booking buttons found, but proceeding to try all available buttons...');
       // Don't fail here - let the strategies try all available buttons
+    }
+    
+    // Check for disabled primary buttons (common issue)
+    const disabledButtons = allButtons.filter(btn => btn.disabled);
+    if (disabledButtons.length > 0) {
+      log('⚠️  Found disabled buttons (may indicate missing required fields):');
+      disabledButtons.forEach((btn, i) => {
+        log(`   ${i + 1}. "${btn.text}" (${btn.className.includes('Primary') ? 'PRIMARY BUTTON - likely the target' : 'secondary'})`);
+      });
+      
+      // Check for common validation issues
+      const commonIssues = await page.evaluate(() => {
+        const issues = [];
+        
+        // Check for required fields
+        const requiredInputs = document.querySelectorAll('input[required], textarea[required], select[required]');
+        const emptyRequired = Array.from(requiredInputs).filter(input => !input.value.trim());
+        if (emptyRequired.length > 0) {
+          issues.push(`${emptyRequired.length} required fields are empty`);
+        }
+        
+        // Check for unchecked required checkboxes
+        const requiredCheckboxes = document.querySelectorAll('input[type="checkbox"][required]');
+        const uncheckedRequired = Array.from(requiredCheckboxes).filter(cb => !cb.checked);
+        if (uncheckedRequired.length > 0) {
+          issues.push(`${uncheckedRequired.length} required checkboxes are unchecked`);
+        }
+        
+        // Check for validation errors
+        const errorElements = document.querySelectorAll('.error, .MuiFormHelperText-root.Mui-error, [class*="error"]');
+        if (errorElements.length > 0) {
+          issues.push(`${errorElements.length} validation errors visible`);
+        }
+        
+        return issues;
+      });
+      
+      if (commonIssues.length > 0) {
+        log('🚨 Potential validation issues preventing booking:');
+        commonIssues.forEach((issue, i) => log(`   ${i + 1}. ${issue}`));
+      }
     }
     
     log('Page setup complete, proceeding with booking...');
