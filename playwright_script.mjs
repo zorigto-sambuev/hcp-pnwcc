@@ -29,7 +29,7 @@ const SLOWMO = Number(process.env.SLOWMO || '0');
 const KEEP_OPEN = process.env.KEEP_OPEN === '1';
 // const HEADLESS =
 //   process.env.HEADLESS === '1' ? true : process.env.HEADLESS === '0' ? false : false;
-const HEADLESS = true
+const HEADLESS = process.env.HEADLESS === '1' ? true : false  // Control via HEADLESS=0 for email confirmations
 
 /** ======= Utils ======= */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1076,6 +1076,9 @@ async function main() {
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
+    // Headless detection evasion args
+    '--disable-blink-features=AutomationControlled',
+    '--disable-features=VizDisplayCompositor',
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
       '--no-first-run',
