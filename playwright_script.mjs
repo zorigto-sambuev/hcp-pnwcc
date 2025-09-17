@@ -1119,28 +1119,69 @@ async function main() {
   colorScheme: 'light'
 });
 
-// Remove webdriver detection
+// Enhanced headless detection evasion
 await context.addInitScript(() => {
   // Remove webdriver property
-        Object.defineProperty(navigator, 'webdriver', {
+  Object.defineProperty(navigator, 'webdriver', {
     get: () => undefined,
-        });
+  });
     
   // Remove automation flags
-  delete window.chrome.runtime.onConnect;
+  delete window.chrome?.runtime?.onConnect;
+  
+  // Enhanced chrome object simulation
+  if (!window.chrome || !window.chrome.runtime) {
+    Object.defineProperty(window, 'chrome', {
+      writable: true,
+      enumerable: true,
+      configurable: false,
+      value: {
+        runtime: {
+          onConnect: undefined,
+          onMessage: undefined,
+          connect: () => ({}),
+        },
+      },
+    });
+  }
   
   // Mock human-like properties
-    Object.defineProperty(navigator, 'plugins', {
+  Object.defineProperty(navigator, 'plugins', {
     get: () => [1, 2, 3, 4, 5],
   });
   
-    Object.defineProperty(navigator, 'languages', {
-      get: () => ['en-US', 'en'],
-    });
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['en-US', 'en'],
+  });
     
-    // Add realistic screen properties
+  // Enhanced screen properties (realistic desktop)
   Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
   Object.defineProperty(screen, 'availHeight', { get: () => 1080 });
+  Object.defineProperty(screen, 'width', { get: () => 1920 });
+  Object.defineProperty(screen, 'height', { get: () => 1080 });
+  Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
+  
+  // Permissions API evasion
+  const originalQuery = window.navigator.permissions.query;
+  window.navigator.permissions.query = (parameters) => (
+    parameters.name === 'notifications' ?
+      Promise.resolve({ state: Notification.permission }) :
+      originalQuery(parameters)
+  );
+  
+  // Memory info simulation
+  Object.defineProperty(navigator, 'deviceMemory', {
+    get: () => 8,
+  });
+  
+  // Connection simulation
+  Object.defineProperty(navigator, 'connection', {
+    get: () => ({
+      effectiveType: '4g',
+      rtt: 100,
+      downlink: 10,
+    }),
+  });
 });
 
 

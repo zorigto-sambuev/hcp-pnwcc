@@ -10,7 +10,7 @@ services:
       - key: PORT
         value: 8080
       - key: HEADLESS
-        value: "1"
+        value: "0"  # Virtual display + headed mode for email confirmations
       - key: NODE_ENV
         value: production
     # You'll need to set these in Render dashboard:
