@@ -13,6 +13,11 @@ services:
         value: "0"  # Virtual display + headed mode for email confirmations
       - key: NODE_ENV
         value: production
+      # Cloud Browser Service (CloudBrowser AI) - bypasses all detection!
+      - key: CLOUD_BROWSER_URL
+        value: "ws://browser.cloudbrowser.ai/35/devtools/browser/1158e9a4-6640-4eec-b71a-90cd40a916c4"
+      - key: CLOUD_BROWSER_TOKEN  
+        value: "849f670a-57c3-4b1a-8fb8-949fe3c3265a"
     # You'll need to set these in Render dashboard:
     # - WEBHOOK_SECRET
     # - RUNNER_URL  

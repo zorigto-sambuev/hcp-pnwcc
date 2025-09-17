@@ -31,6 +31,18 @@ SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
 | `NODE_ENV` | `development` | Runtime environment | ✅ Yes |
 | `HEADLESS` | `1` | Browser headless mode (1=yes, 0=no) | ✅ Yes |
 
+### ☁️ **Cloud Browser Service (Recommended)**
+
+| Variable | Default | Description | Required |
+|----------|---------|-------------|----------|
+| `CLOUD_BROWSER_URL` | `""` | WebSocket URL for cloud browser service | 🔶 Optional |
+| `CLOUD_BROWSER_TOKEN` | `""` | API token for cloud browser authentication | 🔶 Optional |
+
+**Popular Services:**
+- **Browserless.io**: `wss://chrome.browserless.io` 
+- **CloudBrowser AI**: `wss://api.cloudbrowser.ai/browser`
+- **BrowserCloud**: `wss://api.browsercloud.io/browser`
+
 ### 🔐 **Authentication & Security**
 
 | Variable | Default | Description | Required |

@@ -230,14 +230,44 @@ async function fillContactDetails(page, p) {
 
   log('[contact] Filling contact form...');
 
-  // Use getByTestId for reliable targeting of each field
-  if (first_name) await page.getByTestId('online-booking-contact-firstname').fill(first_name);
-  if (last_name) await page.getByTestId('online-booking-contact-lastname').fill(last_name);
-  if (phone) await page.getByTestId('online-booking-contact-phone').fill(phone);
-  if (email) await page.getByTestId('online-booking-contact-email').fill(email);
-  if (street_address) await page.getByTestId('online-booking-contact-street').fill(street_address);
-  if (city) await page.getByTestId('online-booking-contact-city').fill(city);
-  if (zipcode) await page.getByTestId('online-booking-contact-zip').fill(zipcode);
+  // Simulate reading the form before filling (human behavior)
+  await simulateReadingTime(page, 1000);
+
+  // Use getByTestId for reliable targeting of each field with human-like typing
+  if (first_name) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-firstname"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-firstname"]', first_name);
+  }
+  
+  if (last_name) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-lastname"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-lastname"]', last_name);
+  }
+  
+  if (phone) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-phone"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-phone"]', phone);
+  }
+  
+  if (email) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-email"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-email"]', email);
+  }
+  
+  if (street_address) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-street"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-street"]', street_address);
+  }
+  
+  if (city) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-city"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-city"]', city);
+  }
+  
+  if (zipcode) {
+    await simulateHumanMouseMovement(page, '[data-testid="online-booking-contact-zip"]');
+    await simulateHumanTyping(page, '[data-testid="online-booking-contact-zip"]', zipcode);
+  }
 
   // Special handling for the State autocomplete dropdown
   if (state) {
@@ -355,6 +385,9 @@ async function selectTimeFrame(page, startTimeStr) {
   }
 
   log(`[time] Attempting to select time frame: "${startTimeStr}"`);
+  
+  // Simulate looking at available time options (human behavior)
+  await simulateReadingTime(page, 1500);
   
   // Wait for time selection to be available
   await waitIdle(page, 1000);
@@ -477,11 +510,18 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     'button:has-text("Reserve")'
   ];
   
+  // Simulate reading/reviewing the page before clicking (human behavior)
+  await simulateReadingTime(page, 1200);
+  
   let clicked = false;
   for (const selector of buttonSelectors) {
     try {
       await page.waitForSelector(selector, { state: 'visible', timeout: 1000 });
+      
+      // Add human-like mouse movement and hover before click
+      await simulateHumanMouseMovement(page, selector);
       await page.click(selector);
+      
       log('✅ Successfully clicked button with selector:', selector);
       clicked = true;
       break;
@@ -502,6 +542,13 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
     });
     
     if (anyButton) {
+      // Simulate mouse movement even for fallback clicks
+      await page.mouse.move(
+        Math.random() * 100 + 400,
+        Math.random() * 100 + 300
+      );
+      await page.waitForTimeout(Math.random() * 300 + 200);
+      
       await page.evaluate(btn => btn.click(), anyButton);
       log('✅ Clicked first available visible button as fallback');
       clicked = true;
@@ -694,6 +741,64 @@ async function clickBookAppointmentButtonWithFallbacks(page) {
   await waitForNetworkRequests(page);
   
   return { success: true, strategyUsed: 1, method: 'Text-based button selection' };
+}
+
+// Helper to simulate human mouse movement and hovering
+async function simulateHumanMouseMovement(page, targetSelector) {
+  try {
+    // Move mouse to random position first (simulate browsing)
+    await page.mouse.move(
+      Math.random() * 300 + 200,
+      Math.random() * 200 + 150
+    );
+    await page.waitForTimeout(Math.random() * 200 + 100);
+    
+    // Find target element and hover over it
+    const element = await page.locator(targetSelector).first();
+    const box = await element.boundingBox();
+    if (box) {
+      // Move towards target with natural mouse path
+      const targetX = box.x + box.width / 2 + (Math.random() - 0.5) * 15;
+      const targetY = box.y + box.height / 2 + (Math.random() - 0.5) * 15;
+      
+      await page.mouse.move(targetX, targetY);
+      await page.waitForTimeout(Math.random() * 300 + 200); // Hover time
+    }
+  } catch (error) {
+    // Continue even if mouse movement fails
+  }
+}
+
+// Helper to simulate human typing patterns
+async function simulateHumanTyping(page, selector, text) {
+  await page.locator(selector).click();
+  await page.waitForTimeout(Math.random() * 150 + 100);
+  
+  // Clear field first
+  await page.keyboard.press('Control+a');
+  await page.waitForTimeout(50);
+  
+  // Type with human-like rhythm
+  for (const char of text) {
+    await page.keyboard.type(char);
+    const delay = Math.random() * 80 + 20; // 20-100ms per character
+    await page.waitForTimeout(delay);
+  }
+  await page.waitForTimeout(Math.random() * 200 + 150);
+}
+
+// Helper to simulate natural reading/thinking time
+async function simulateReadingTime(page, baseTime = 800) {
+  const readingTime = baseTime + Math.random() * 800;
+  
+  // Add subtle mouse movements during "reading"
+  for (let i = 0; i < 2; i++) {
+    await page.mouse.move(
+      Math.random() * 100 + 400,
+      Math.random() * 100 + 300
+    );
+    await page.waitForTimeout(readingTime / 3);
+  }
 }
 
 // Helper function to wait for network requests
@@ -1069,45 +1174,77 @@ async function main() {
   const payload = JSON.parse(PAYLOAD_JSON_STRING || '{}');
   log('[loader] Using payload from environment variable');
   
-  const browser = await chromium.launch({
-    headless: HEADLESS,
-  Proxy : proxyConfig,
-    slowMo: SLOWMO,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    // Headless detection evasion args
-    '--disable-blink-features=AutomationControlled',
-    '--disable-features=VizDisplayCompositor',
-    '--disable-dev-shm-usage',
-    '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-    '--no-zygote',
-    '--single-process',
-    '--disable-gpu',
-    
-    // Anti-bot detection
-    '--disable-blink-features=AutomationControlled',
-    '--disable-features=VizDisplayCompositor',
-      '--disable-web-security',
-    '--disable-features=TranslateUI',
-    '--disable-ipc-flooding-protection',
-    '--disable-renderer-backgrounding',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-background-timer-throttling',
-    '--disable-hang-monitor',
-    '--disable-client-side-phishing-detection',
-    '--disable-popup-blocking',
-    '--disable-default-apps',
-    '--disable-extensions',
-    '--disable-component-extensions-with-background-pages',
-    '--disable-sync',
-    
-    // Make it look more human
-    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7103.48 Safari/537.36',
-    '--window-size=1920,1080'
-  ]
-});
+  // Check if using cloud browser service
+  const CLOUD_BROWSER_URL = process.env.CLOUD_BROWSER_URL; // e.g., "wss://chrome.browserless.io?token=YOUR_TOKEN"
+  const CLOUD_BROWSER_TOKEN = process.env.CLOUD_BROWSER_TOKEN;
+
+  let browser;
+  if (CLOUD_BROWSER_URL) {
+    // Connect to cloud browser service
+    log('[run] 🌩️  Connecting to cloud browser service');
+    try {
+      if (CLOUD_BROWSER_URL.includes('browserless')) {
+        // Browserless.io format
+        browser = await chromium.connectOverCDP(`${CLOUD_BROWSER_URL}&token=${CLOUD_BROWSER_TOKEN}`);
+      } else if (CLOUD_BROWSER_URL.includes('cloudbrowser')) {
+        // CloudBrowser AI format - direct CDP connection to browser instance
+        log(`[run] 🔗 Connecting to CloudBrowser AI instance: ${CLOUD_BROWSER_URL}`);
+        browser = await chromium.connectOverCDP(CLOUD_BROWSER_URL);
+      } else {
+        // Generic cloud browser
+        browser = await chromium.connectOverCDP(CLOUD_BROWSER_URL);
+      }
+      log('[run] ✅ Connected to cloud browser successfully - should bypass all detection!');
+    } catch (error) {
+      errLog('[run] ❌ Failed to connect to cloud browser:', error.message);
+      errLog('[run] 🔄 Falling back to local browser...');
+      browser = null;
+    }
+  }
+
+  // Fallback to local browser if cloud connection failed or not configured
+  if (!browser) {
+    log('[run] Using local browser');
+    browser = await chromium.launch({
+      headless: HEADLESS,
+    Proxy : proxyConfig,
+      slowMo: SLOWMO,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      // Headless detection evasion args
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=VizDisplayCompositor',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu',
+      
+      // Anti-bot detection
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=VizDisplayCompositor',
+        '--disable-web-security',
+      '--disable-features=TranslateUI',
+      '--disable-ipc-flooding-protection',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-background-timer-throttling',
+      '--disable-hang-monitor',
+      '--disable-client-side-phishing-detection',
+      '--disable-popup-blocking',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--disable-sync',
+      
+      // Make it look more human
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7103.48 Safari/537.36',
+      '--window-size=1920,1080'
+    ]
+  });
+  }
 
   const context = await browser.newContext({
   viewport: { width: 1920, height: 1080 },
